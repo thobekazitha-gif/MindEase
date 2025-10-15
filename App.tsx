@@ -7,12 +7,11 @@ import { MoodDashboard } from './components/MoodDashboard';
 import { Affirmation } from './components/Affirmation';
 import { BreathingExercise } from './components/BreathingExercise';
 import { Message, VoiceSettings } from './types';
-import { analyzeMood, getAudio } from './services/geminiService';
+import { analyzeMood, getAudio, generateSummary } from './services/geminiService';
 import { playAudio } from './utils/helpers';
 import { systemInstruction } from './data/prompts';
 import { GoogleGenAI, Chat } from '@google/genai';
 
-// FIX: Initialize the Gemini AI client.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 function App() {
@@ -21,6 +20,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
+  const [userMessageCount, setUserMessageCount] = useState(0);
   
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ voice: 'Kore', rate: 1.0 });
   
@@ -28,12 +28,10 @@ function App() {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    // Initialize AudioContext on user interaction (or mount)
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
     }
     
-    // Initialize chat session
     chatRef.current = ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
@@ -42,7 +40,6 @@ function App() {
         },
     });
 
-    // Initial message from assistant
     setMessages([{
       id: 'init-1',
       text: "Hello! I'm MindEase, your personal AI assistant for mental well-being. How are you feeling today?",
@@ -55,70 +52,136 @@ function App() {
   const handleSendMessage = async (text: string) => {
     setIsSending(true);
 
+    const userMessageId = `user-${Date.now()}`;
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: userMessageId,
       text: text,
       sender: 'user',
       timestamp: Date.now(),
     };
-
-    // Analyze mood and add to message
-    const moodScore = await analyzeMood(text);
-    if (moodScore !== null) {
-      userMessage.moodScore = moodScore;
-    }
     
+    const assistantMessagePlaceholderId = `assistant-${Date.now()}`;
     const assistantMessagePlaceholder: Message = {
-      id: `assistant-${Date.now()}`,
+      id: assistantMessagePlaceholderId,
       text: '',
       sender: 'assistant',
       timestamp: Date.now() + 1,
       isLoading: true,
     };
-    
+
+    // Show user message and assistant placeholder immediately for better responsiveness.
     setMessages(prev => [...prev, userMessage, assistantMessagePlaceholder]);
+
+    // Analyze mood in the background without blocking the chat response.
+    analyzeMood(text).then(moodScore => {
+        if (moodScore !== null) {
+            setMessages(prev => prev.map(m => m.id === userMessageId ? { ...m, moodScore } : m));
+        }
+    });
 
     try {
         if (!chatRef.current) {
             throw new Error("Chat session not initialized.");
         }
         
-        // Trigger breathing exercise if user says so
         if (text.toLowerCase().includes('breathing exercise')) {
             setIsBreathingExerciseOpen(true);
             const breathingResponse = "Of course. Let's do a short breathing exercise to help you relax. Just follow the on-screen guide.";
-            setMessages(prev => prev.map(m => m.id === assistantMessagePlaceholder.id ? { ...m, text: breathingResponse, isLoading: false } : m));
+            setMessages(prev => prev.map(m => m.id === assistantMessagePlaceholderId ? { ...m, text: breathingResponse, isLoading: false } : m));
             setIsSending(false);
             return;
         }
 
-        const result = await chatRef.current.sendMessage({ message: text });
-        const responseText = result.text;
+        const stream = await chatRef.current.sendMessageStream({ message: text });
         
-        const assistantMessage: Message = {
+        let responseText = "";
+        let firstChunk = true;
+        for await (const chunk of stream) {
+            responseText += chunk.text;
+             if (firstChunk) {
+                setMessages(prev => prev.map(m => 
+                    m.id === assistantMessagePlaceholderId 
+                    ? { ...m, text: responseText, isLoading: false, isStreaming: true }
+                    : m
+                ));
+                firstChunk = false;
+            } else {
+                setMessages(prev => prev.map(m => 
+                    m.id === assistantMessagePlaceholderId 
+                    ? { ...m, text: responseText }
+                    : m
+                ));
+            }
+        }
+
+        const finalAssistantMessage: Message = {
             ...assistantMessagePlaceholder,
+            id: assistantMessagePlaceholderId,
             text: responseText,
+            isStreaming: false,
             isLoading: false,
         };
-        
-        setMessages(prev => prev.map(m => m.id === assistantMessagePlaceholder.id ? assistantMessage : m));
-        
-        // Generate and play audio
-        if (audioContextRef.current) {
-            const audioData = await getAudio(responseText, voiceSettings);
-            if (audioData) {
-                await playAudio(audioData, audioContextRef.current, voiceSettings.rate);
+
+        const newCount = userMessageCount + 1;
+        const shouldSummarize = newCount >= 5;
+
+        // Finalize the assistant's message and handle summary logic.
+        setMessages(currentMessages => {
+            let updatedMessages = currentMessages.map(m => 
+                m.id === assistantMessagePlaceholderId ? finalAssistantMessage : m
+            );
+
+            if (shouldSummarize) {
+                const summaryPlaceholderId = `summary-${Date.now()}`;
+                const summaryPlaceholder: Message = {
+                    id: summaryPlaceholderId,
+                    sender: 'assistant',
+                    text: '',
+                    isLoading: true,
+                    type: 'summary',
+                    timestamp: Date.now(),
+                };
+
+                // Generate summary asynchronously based on the latest conversation context.
+                generateSummary(updatedMessages).then(summaryText => {
+                    setMessages(latestMessages => latestMessages.map(m => 
+                        m.id === summaryPlaceholderId 
+                        ? { ...m, text: summaryText || "Could not generate summary.", isLoading: false }
+                        : m
+                    ));
+                });
+                
+                return [...updatedMessages, summaryPlaceholder];
             }
+            
+            return updatedMessages;
+        });
+        
+        if (shouldSummarize) {
+            setUserMessageCount(0);
+        } else {
+            setUserMessageCount(newCount);
+        }
+        
+        // Generate and play audio asynchronously as soon as the text is finalized.
+        if (audioContextRef.current && responseText) {
+             getAudio(responseText, voiceSettings).then(audioData => {
+                if (audioData && audioContextRef.current) {
+                    playAudio(audioData, audioContextRef.current, voiceSettings.rate)
+                        .catch(err => console.error("Error playing audio:", err));
+                }
+            }).catch(err => console.error("Error fetching audio:", err));
         }
 
     } catch (error) {
       console.error("Failed to send message:", error);
       const errorMessage: Message = {
         ...assistantMessagePlaceholder,
+        id: assistantMessagePlaceholderId,
         text: "Sorry, I'm having trouble connecting right now. Please try again later.",
         isLoading: false,
       };
-      setMessages(prev => prev.map(m => m.id === assistantMessagePlaceholder.id ? errorMessage : m));
+      setMessages(prev => prev.map(m => m.id === assistantMessagePlaceholderId ? errorMessage : m));
     } finally {
       setIsSending(false);
     }

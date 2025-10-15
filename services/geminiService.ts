@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { VoiceSettings } from "../types";
+import { VoiceSettings, Message } from "../types";
 import { moodAnalysisSchema } from "../data/prompts";
 
 // FIX: Implement Gemini API service functions.
@@ -59,3 +59,30 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
     return null;
   }
 };
+
+export const generateSummary = async (conversationHistory: Message[]): Promise<string | null> => {
+    try {
+      const formattedHistory = conversationHistory
+        .filter(msg => msg.type !== 'summary' && !msg.isLoading && msg.text)
+        .slice(-10) // Take last 10 messages for context
+        .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
+        .join('\n');
+
+      if (!formattedHistory) return null;
+
+      const prompt = `Based on the following conversation, provide a concise summary (2-3 sentences) highlighting the key themes and one positive insight for the user. Present it as a helpful reflection, speaking directly to the user in the second person (e.g., "It seems you've been exploring..."). Conversation:\n\n${formattedHistory}`;
+
+      const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: {
+              temperature: 0.5,
+          }
+      });
+
+      return response.text.trim();
+    } catch (error) {
+      console.error("Error generating summary:", error);
+      return null;
+    }
+  };

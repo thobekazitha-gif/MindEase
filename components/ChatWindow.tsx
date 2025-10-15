@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Message } from '../types';
-import { BotIcon, LoadingSpinner } from './icons';
+import { BotIcon, LoadingSpinner, ClipboardIcon } from './icons';
 import ReactMarkdown from 'react-markdown';
 
 interface ChatWindowProps {
@@ -20,6 +20,26 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   }, [messages]);
 
   const MessageBubble = ({ msg }: { msg: Message }) => {
+    if (msg.type === 'summary') {
+      return (
+        <div className="my-4 mx-auto max-w-2xl p-4 bg-slate-800 border border-violet-700/50 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3 mb-2">
+            <ClipboardIcon className="w-5 h-5 text-violet-400 flex-shrink-0" />
+            <h3 className="font-bold text-md text-violet-400">Summary & Insight</h3>
+          </div>
+          {msg.isLoading ? (
+            <div className="flex items-center justify-center p-2">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <div className="prose prose-sm prose-invert text-slate-300">
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     const isUser = msg.sender === 'user';
     return (
       <div className={`flex items-end gap-2 my-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -36,8 +56,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
               <LoadingSpinner />
             </div>
           ) : (
-            <div className="prose prose-sm prose-invert">
+            <div className="prose prose-sm prose-invert break-words">
                 <ReactMarkdown>{msg.text}</ReactMarkdown>
+                {msg.isStreaming && <span className="inline-block w-2 h-4 ml-1 align-bottom bg-violet-400 animate-pulse rounded-full" />}
             </div>
           )}
         </div>
