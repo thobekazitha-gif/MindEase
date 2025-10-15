@@ -11,7 +11,7 @@ export const Affirmation: React.FC = () => {
   }, []);
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none">
+    <div className="pb-2 pt-1">
         <div className="bg-slate-800/80 backdrop-blur-lg p-3 text-center rounded-xl border border-slate-700 shadow-lg">
           <p className="text-sm text-slate-300 italic">
             ✨ <span className="font-medium text-violet-400">{currentAffirmation}</span>

@@ -85,3 +85,11 @@ export const ClipboardIcon = (props: React.SVGProps<SVGSVGElement>) => (
       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
     </IconBase>
 );
+
+export const LightbulbIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <IconBase {...props}>
+    <path d="M12 2a7 7 0 0 0-7 7c0 3.07 1.667 4.667 3 6h8c1.333-1.333 3-2.93 3-6a7 7 0 0 0-7-7z" />
+    <path d="M9 21h6" />
+    <path d="M12 17v4" />
+  </IconBase>
+);

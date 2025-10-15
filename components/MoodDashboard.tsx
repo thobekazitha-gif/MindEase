@@ -9,6 +9,31 @@ interface MoodDashboardProps {
   messages: Message[];
 }
 
+const MoodInsight: React.FC<{ average: number }> = ({ average }) => {
+    if (isNaN(average)) return null;
+
+    let insightText = "Tracking your mood is a great step in understanding your emotional well-being.";
+    let emoji = "😊";
+
+    if (average >= 7.5) {
+        insightText = "You've been feeling quite positive lately! Keep embracing what brings you joy.";
+        emoji = "✨";
+    } else if (average >= 5) {
+        insightText = "You're navigating through a mix of feelings. Remember that every emotion is valid.";
+        emoji = "😌";
+    } else {
+        insightText = "It looks like things have been challenging recently. Be extra kind to yourself.";
+        emoji = "❤️";
+    }
+
+    return (
+        <p className="text-center text-sm text-slate-400 mt-4">
+            {emoji} {insightText}
+        </p>
+    );
+};
+
+
 export const MoodDashboard: React.FC<MoodDashboardProps> = ({ isOpen, onClose, messages }) => {
   const moodData = messages
     .filter(msg => msg.sender === 'user' && typeof msg.moodScore === 'number')
@@ -18,9 +43,11 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ isOpen, onClose, m
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
     
-  const averageMood = moodData.length > 0
-    ? (moodData.reduce((sum, data) => sum + data.score, 0) / moodData.length).toFixed(1)
-    : 'N/A';
+  const averageMoodValue = moodData.length > 0
+    ? (moodData.reduce((sum, data) => sum + data.score, 0) / moodData.length)
+    : NaN;
+    
+  const averageMood = !isNaN(averageMoodValue) ? averageMoodValue.toFixed(1) : 'N/A';
 
   return (
     <div 
@@ -46,13 +73,14 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ isOpen, onClose, m
         
         {moodData.length > 1 ? (
           <div className="space-y-4">
-            <div className="p-4 bg-slate-700 rounded-lg text-center">
+            <div className="p-4 bg-gradient-to-br from-slate-700 to-slate-600 rounded-lg text-center shadow-inner">
                 <p className="text-sm text-slate-300">Average Mood Score</p>
-                <p className="text-3xl font-bold text-violet-400">{averageMood}</p>
+                <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-pink-500">{averageMood}</p>
             </div>
-            <div className="w-full h-64">
+            <div className="w-full h-64 bg-slate-700/50 p-2 rounded-lg">
                <MoodChart data={moodData} />
             </div>
+            <MoodInsight average={averageMoodValue} />
           </div>
         ) : (
           <div className="text-center py-10">

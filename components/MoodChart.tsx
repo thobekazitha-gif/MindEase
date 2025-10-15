@@ -25,12 +25,14 @@ export const MoodChart: React.FC<MoodChartProps> = ({ data }) => {
     return height - (((score - minY) / (maxY - minY)) * (height - padding * 2) + padding);
   };
 
-  const path = data.map((point, i) => {
+  const linePath = data.map((point, i) => {
     const x = getX(point.timestamp);
     const y = getY(point.score);
     return `${i === 0 ? 'M' : 'L'} ${x},${y}`;
   }).join(' ');
   
+  const areaPath = `${linePath} L ${getX(maxX)},${height - padding} L ${getX(minX)},${height - padding} Z`;
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -39,6 +41,12 @@ export const MoodChart: React.FC<MoodChartProps> = ({ data }) => {
   return (
     <div className="w-full h-full flex justify-center items-center">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+            <defs>
+                <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
+                </linearGradient>
+            </defs>
             {/* Y-Axis labels and grid lines */}
             {[1, 5, 10].map(score => (
                 <g key={score}>
@@ -60,8 +68,11 @@ export const MoodChart: React.FC<MoodChartProps> = ({ data }) => {
                 </g>
             ))}
 
-            {/* Path */}
-            <path d={path} stroke="#a78bfa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Gradient Area */}
+            <path d={areaPath} fill="url(#moodGradient)" />
+
+            {/* Line Path */}
+            <path d={linePath} stroke="#a78bfa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
 
             {/* Points */}
             {data.map((point, i) => (
