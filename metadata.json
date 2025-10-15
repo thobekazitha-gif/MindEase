@@ -1,0 +1,7 @@
+{
+  "name": "MindEase – AI Mental Health & Motivation Assistant",
+  "description": "A safe, supportive, and AI-powered conversational companion that helps users reflect, heal, and stay motivated through intelligent dialogue, journaling analysis, and uplifting speech feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
