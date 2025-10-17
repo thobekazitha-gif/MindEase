@@ -1,5 +1,5 @@
 {
-  "name": "MindEase – AI Study Buddy",
+  "name": "MindEase - AI Study Buddy",
   "description": "An AI-powered study companion that helps users learn, understand complex topics, and stay motivated through intelligent dialogue, practice questions, and clear explanations.",
   "requestFramePermissions": [
     "microphone"

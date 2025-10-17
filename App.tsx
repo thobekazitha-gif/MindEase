@@ -10,7 +10,8 @@ import { Message, VoiceSettings, Visual } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
 import { getAudio, getAi, generateImage } from './services/geminiService';
 import { systemInstruction, studyBuddySchema } from './data/prompts';
-import { GoogleGenAI } from '@google/genai';
+// FIX: Import GenerateContentResponse to explicitly type the API response.
+import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -180,6 +181,15 @@ const App: React.FC = () => {
           aiRef.current = getAi();
         }
         
+        // FIX: Using `aiRef.current` directly in an async call can be unsafe for TypeScript's
+        // type inference, as it can't guarantee the ref's value won't change before the `await`
+        // resolves. Assigning it to a local constant `ai` provides a stable reference, which
+        // resolves the issue where `response.text` was being inferred as type `never`.
+        const ai = aiRef.current;
+        if (!ai) {
+          throw new Error("AI client not initialized.");
+        }
+        
         const conversationHistory = messages
             .filter(m => !m.isLoading)
             .map(m => `${m.sender}: ${m.text}`)
@@ -187,7 +197,8 @@ const App: React.FC = () => {
         
         const fullPrompt = `${conversationHistory}\nuser: ${text}\nassistant:`;
 
-        const response = await aiRef.current.models.generateContent({
+        // FIX: Add explicit type annotation to resolve TypeScript inference issue.
+        const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: fullPrompt,
             config: {
@@ -198,8 +209,6 @@ const App: React.FC = () => {
             }
         });
 
-        // FIX: The type inference for `response.text` with optional chaining was causing a TypeScript error.
-        // As per documentation, `response.text` should be a string. Removing the optional chain `?.` resolves the type error.
         const jsonText = response.text.trim();
         if (!jsonText) {
             throw new Error("Received an empty response from the AI.");
