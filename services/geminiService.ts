@@ -4,33 +4,29 @@ import { moodAnalysisSchema } from "../data/prompts";
 
 // Lazy-initialize to prevent app crash on load if API key is missing.
 let ai: GoogleGenAI | null = null;
+const API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
 
-const getAi = (): GoogleGenAI => {
+export const getAi = (): GoogleGenAI => {
     if (!ai) {
-        const apiKey ="AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
-;
-        if (!apiKey) {
+        if (!API_KEY) {
             // This error will be caught by the try/catch blocks in the calling functions.
-            throw new Error("API_KEY environment variable not set. Please configure it in your deployment settings.");
+            throw new Error("API key is not set.");
         }
-        ai = new GoogleGenAI({ apiKey });
+        ai = new GoogleGenAI({ apiKey: API_KEY });
     }
     return ai;
 };
 
 export const analyzeMood = async (message: string): Promise<number | null> => {
   try {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${API_KEY}`,
-  },
-  body: JSON.stringify({
-    contents: [{ role: "user", parts: [{ text: userMessage }] }]
-  })
-});
-
+    const response = await getAi().models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Analyze the mood of the following text on a scale from 1 to 10 (1=very negative, 10=very positive) and return only the score. Text: "${message}"`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: moodAnalysisSchema,
+      },
+    });
     
     const jsonText = response.text.trim();
     if (!jsonText) return null;

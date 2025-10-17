@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Chat } from '@google/genai';
+import { Chat } from '@google/genai';
 import { Header } from './components/Header';
 import { ChatWindow } from './components/ChatWindow';
 import { ChatInput } from './components/ChatInput';
@@ -10,7 +10,7 @@ import { Affirmation } from './components/Affirmation';
 import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { Message, VoiceSettings } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
-import { analyzeMood, getAudio, generateSummary } from './services/geminiService';
+import { analyzeMood, getAudio, generateSummary, getAi } from './services/geminiService';
 import { systemInstruction } from './data/prompts';
 
 const App: React.FC = () => {
@@ -41,13 +41,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const initChat = () => {
       try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-          setError("Configuration Error: The API key for the AI service is not set. Please contact the site administrator.");
-          console.error("API_KEY environment variable is not set.");
-          return;
-        }
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = getAi();
         chatRef.current = ai.chats.create({
           model: 'gemini-2.5-flash',
           config: {
