@@ -111,3 +111,19 @@ export const PhotographIcon = (props: React.SVGProps<SVGSVGElement>) => (
         <polyline points="21 15 16 10 5 21" />
     </IconBase>
 );
+
+export const TableIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <IconBase {...props}>
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <line x1="3" y1="9" x2="21" y2="9" />
+        <line x1="3" y1="15" x2="21" y2="15" />
+        <line x1="12" y1="3" x2="12" y2="21" />
+    </IconBase>
+);
+
+export const LinkIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <IconBase {...props}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
+  </IconBase>
+);

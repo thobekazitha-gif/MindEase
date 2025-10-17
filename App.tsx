@@ -1,33 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Chat } from '@google/genai';
 import { Header } from './components/Header';
 import { ChatWindow } from './components/ChatWindow';
 import { ChatInput } from './components/ChatInput';
 import { SettingsPanel } from './components/SettingsPanel';
 import { MoodDashboard } from './components/MoodDashboard';
-import { BreathingExercise } from './components/BreathingExercise';
 import { Affirmation } from './components/Affirmation';
 import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
-import { Message, VoiceSettings } from './types';
+import { Message, VoiceSettings, Visual } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
-import { analyzeMood, getAudio, generateSummary, getAi, generateImage } from './services/geminiService';
-import { systemInstruction } from './data/prompts';
+import { getAudio, getAi } from './services/geminiService';
+import { systemInstruction, studyBuddySchema } from './data/prompts';
+import { GoogleGenAI } from '@google/genai';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: generateId(),
-      text: "Hello! I'm your AI Study Buddy from MindEase. I can help you with homework, explain complex topics, and get you ready for tests. What subject are we focusing on today?",
+      text: "Hi! I'm your AI Study Buddy. Let's explore a topic together. What would you like to learn about today? I can provide explanations, visual aids, and references to help you out!",
       sender: 'assistant',
       timestamp: Date.now(),
+      visuals: [
+          {
+              description: "A friendly robot tutor waving hello, surrounded by books and lightbulbs.",
+              type: "illustration",
+              source: "https://google.com/images" 
+          }
+      ],
+      references: ["https://en.wikipedia.org/wiki/Pedagogy"]
     }
   ]);
   const [isSending, setIsSending] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
-  const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
   const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
@@ -35,10 +39,10 @@ const App: React.FC = () => {
     rate: 1.0,
   });
 
-  const chatRef = useRef<Chat | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<AudioBuffer[]>([]);
   const isProcessorActiveRef = useRef(false);
+  const aiRef = useRef<GoogleGenAI | null>(null);
 
   // A more robust, async queue processor for audio playback.
   const processAudioQueue = async () => {
@@ -65,7 +69,6 @@ const App: React.FC = () => {
           });
         } catch (error) {
             console.error("Error playing audio from queue:", error);
-            // If one buffer fails, we should continue with the next.
         }
       }
     }
@@ -80,7 +83,7 @@ const App: React.FC = () => {
         const audioBytes = decode(base64Audio);
         const audioBuffer = await decodeAudioData(audioBytes, audioContextRef.current, 24000, 1);
         audioQueueRef.current.push(audioBuffer);
-        processAudioQueue(); // This will start the processor if it's not already running.
+        processAudioQueue();
       }
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -92,102 +95,44 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        
-        // Queue the initial message to be spoken. It will be played after the first user interaction
-        // due to browser autoplay policies.
         const initialMessage = messages[0];
         if (initialMessage && initialMessage.sender === 'assistant') {
             speak(initialMessage.text);
         }
     }
-  }, []); // This should run only once on mount.
+    if (!aiRef.current) {
+        try {
+            aiRef.current = getAi();
+        } catch (e) {
+            console.error("Error initializing Gemini:", e);
+        }
+    }
+  }, []);
 
   // Effect to clear notifications after a delay
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => {
         setNotification(null);
-      }, 5000); // clear after 5 seconds
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [notification]);
 
-  // Initialize Gemini Chat
-  useEffect(() => {
-    const initChat = () => {
-      try {
-        const ai = getAi();
-        chatRef.current = ai.chats.create({
-          model: 'gemini-2.5-flash',
-          config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7,
-          },
-        });
-      } catch (e) {
-        console.error("Error initializing Gemini Chat:", e);
-        setError("An error occurred while initializing the AI assistant. Please try refreshing the page.");
-      }
-    };
-    initChat();
-  }, []);
-  
-  const handleGenerateImage = async (prompt: string) => {
-    const imageMessageId = generateId();
-    const loadingMessage: Message = {
-        id: imageMessageId,
-        sender: 'assistant',
-        text: "Here's a diagram to help:",
-        timestamp: Date.now(),
-        type: 'generated_image',
-        isLoading: true,
-        imageGenerationPrompt: prompt,
-    };
-    setMessages(prev => [...prev, loadingMessage]);
-
-    try {
-        const imageData = await generateImage(prompt);
-        setMessages(prev => prev.map(msg => 
-            msg.id === imageMessageId 
-            ? { ...msg, isLoading: false, imageData: imageData ?? undefined } 
-            : msg
-        ));
-    } catch (error) {
-        console.error("Image generation failed:", error);
-        setMessages(prev => prev.map(msg => 
-            msg.id === imageMessageId 
-            ? { ...msg, isLoading: false, imageData: undefined } 
-            : msg
-        ));
-        setNotification("Diagram generation failed. Please try again.");
-    }
-  };
-
   const handleSendMessage = async (text: string) => {
-    // Resume AudioContext if it's suspended. This is crucial for browsers that block autoplay.
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume().then(() => {
-          // After resuming, start the processor to play anything that was queued before interaction.
           processAudioQueue();
       }).catch(e => console.error("Error resuming AudioContext:", e));
     }
 
     setIsSending(true);
 
-    let moodScoreResult: number | undefined;
-    try {
-        moodScoreResult = (await analyzeMood(text)) ?? undefined;
-    } catch (error) {
-        console.error("Mood analysis failed, continuing without it:", error);
-        // This is a non-critical background task, so we don't notify the user.
-    }
-
     const userMessage: Message = {
       id: generateId(),
       text,
       sender: 'user',
       timestamp: Date.now(),
-      moodScore: moodScoreResult,
     };
 
     const assistantMessageId = generateId();
@@ -197,126 +142,76 @@ const App: React.FC = () => {
         sender: 'assistant',
         timestamp: Date.now(),
         isLoading: true,
-        isStreaming: true,
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
     try {
-        if (!chatRef.current) {
-            throw new Error("Chat not initialized");
+        if (!aiRef.current) {
+            throw new Error("AI not initialized");
         }
         
-        const stream = await chatRef.current.sendMessageStream({ message: text });
+        const conversationHistory = messages
+            .filter(m => !m.isLoading)
+            .map(m => `${m.sender}: ${m.text}`)
+            .join('\n');
+        
+        const fullPrompt = `${conversationHistory}\nuser: ${text}\nassistant:`;
 
-        let fullResponse = "";
-
-        for await (const chunk of stream) {
-            const chunkText = chunk.text;
-            fullResponse += chunkText;
-
-            // Stream to UI
-            setMessages((prev) =>
-                prev.map((msg) =>
-                    msg.id === assistantMessageId ? { ...msg, text: fullResponse, isLoading: false } : msg
-                )
-            );
-        }
-
-        // Check for visual aid offer
-        const offerMatch = fullResponse.match(/\[VISUAL_AID_OFFER:\s*(.*?)\]/);
-        if (offerMatch) {
-            const imagePrompt = offerMatch[1];
-            const cleanedResponse = fullResponse.replace(offerMatch[0], '').trim();
-
-            // Update original message with cleaned text
-            setMessages((prev) =>
-                prev.map((msg) =>
-                    msg.id === assistantMessageId ? { ...msg, text: cleanedResponse, isStreaming: false } : msg
-                )
-            );
-
-            // Add the offer message
-            const offerMessage: Message = {
-                id: generateId(),
-                sender: 'assistant',
-                text: "It looks like a diagram might help here. Shall I create one?",
-                timestamp: Date.now(),
-                type: 'visual_aid_offer',
-                imageGenerationPrompt: imagePrompt,
-            };
-            setMessages(prev => [...prev, offerMessage]);
-            await speak(cleanedResponse); // Speak the cleaned response first
-
-        } else {
-            // Await each speak call to ensure sentences are fetched and queued sequentially.
-            if (fullResponse.trim()) {
-                const sentences = fullResponse.trim().match(/[^.!?]+[.!?]?/g) || [];
-                for (const sentence of sentences) {
-                    if(sentence.trim()) {
-                        await speak(sentence.trim());
-                    }
-                }
+        const response = await aiRef.current.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: fullPrompt,
+            config: {
+                systemInstruction: systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: studyBuddySchema,
+                temperature: 0.7
             }
-             // Finalize assistant message
-            setMessages((prev) =>
-                prev.map((msg) =>
-                    msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
-                )
-            );
-        }
-       
-        // Breathing exercise suggestion logic
-        if (text.toLowerCase().includes('breathing') || (userMessage.moodScore && userMessage.moodScore <= 3)) {
-            const suggestionMessage: Message = {
-                id: generateId(),
-                text: "It seems like a moment of calm could be helpful. Would you like to try a guided breathing exercise?",
-                sender: 'assistant',
-                timestamp: Date.now(),
-                type: 'breathing_suggestion',
-            };
-            setMessages(prev => [...prev, suggestionMessage]);
-        }
+        });
 
-        // Summary generation logic (every 5 user messages) with graceful failure
-        const userMessageCount = messages.filter(m => m.sender === 'user').length + 1;
-        if (userMessageCount % 5 === 0) {
-           try {
-               const summaryText = await generateSummary([...messages, userMessage, { ...assistantMessage, text: fullResponse }]);
-               if(summaryText) {
-                 const summaryMessage: Message = {
-                    id: generateId(),
-                    text: summaryText,
-                    sender: 'assistant',
-                    timestamp: Date.now(),
-                    type: 'summary',
-                 };
-                 setMessages(prev => [...prev, summaryMessage]);
-                 // Speak the summary, awaiting each sentence to prevent audio skipping.
-                 const sentences = summaryText.trim().match(/[^.!?]+[.!?]?/g) || [];
-                 for (const sentence of sentences) {
-                   if (sentence.trim()) {
-                     await speak(sentence.trim());
-                   }
-                 }
-               }
-           } catch(error) {
-               console.error("Summary generation failed, continuing without it:", error);
-               // This is a non-critical background task, no user notification needed.
-           }
+        const jsonText = response.text?.trim();
+        if (!jsonText) {
+            throw new Error("Received an empty response from the AI.");
         }
+        
+        let parsedResponse: { text: string; visuals: Visual[]; references: string[] };
 
+        try {
+            parsedResponse = JSON.parse(jsonText);
+        } catch (parseError) {
+            console.error("Failed to parse JSON response:", jsonText);
+            throw new Error("The AI returned a response in an unexpected format.");
+        }
+        
+        const finalAssistantMessage: Message = {
+            id: assistantMessageId,
+            text: parsedResponse.text || "I'm not sure how to respond to that.",
+            sender: 'assistant',
+            timestamp: Date.now(),
+            isLoading: false,
+            visuals: parsedResponse.visuals,
+            references: parsedResponse.references
+        };
+        
+        setMessages(prev => prev.map(msg => msg.id === assistantMessageId ? finalAssistantMessage : msg));
+        
+        if (parsedResponse.text) {
+          const sentences = parsedResponse.text.trim().match(/[^.!?]+[.!?]?/g) || [];
+          for (const sentence of sentences) {
+              if(sentence.trim()) {
+                  await speak(sentence.trim());
+              }
+          }
+        }
+        
     } catch (error) {
       console.error('Error sending message:', error);
-      // Provide more specific, actionable error messages in the chat.
-      const errorMessage = (error instanceof Error && error.message.toLowerCase().includes('api key'))
-        ? "I can't connect due to a configuration issue. Please inform the administrator."
-        : "I'm having trouble connecting. Please check your internet connection and try again in a moment.";
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
-            ? { ...msg, text: errorMessage, isLoading: false, isStreaming: false }
+            ? { ...msg, text: `Sorry, I ran into a problem: ${errorMessage}`, isLoading: false }
             : msg
         )
       );
@@ -329,31 +224,16 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen bg-slate-900 text-slate-100 font-sans">
       <Header
         onSettingsClick={() => setIsSettingsOpen(true)}
-        onDashboardClick={() => setIsDashboardOpen(true)}
         onTechInfoClick={() => setIsTechInfoOpen(true)}
       />
-      {error ? (
-        <main className="flex-1 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-red-500/50 p-6 rounded-lg max-w-md text-center shadow-lg">
-            <h2 className="text-xl font-bold text-red-400 mb-2">Application Error</h2>
-            <p className="text-slate-300">{error}</p>
-          </div>
-        </main>
-      ) : (
         <main className="flex-1 flex flex-col min-h-0 relative">
-          <ChatWindow 
-            messages={messages} 
-            onStartBreathingExercise={() => setIsBreathingExerciseOpen(false)}
-            onGenerateImage={handleGenerateImage} 
-          />
+          <ChatWindow messages={messages} />
           <div className="px-4">
               <Affirmation />
           </div>
           <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
         </main>
-      )}
 
-      {/* Notification Toast for non-critical errors */}
       {notification && (
           <div className="fixed bottom-24 sm:bottom-6 right-6 bg-red-600 text-white p-3 rounded-lg shadow-lg z-50 transition-opacity duration-300">
               <p className="font-bold text-sm">A small hiccup!</p>
@@ -367,18 +247,10 @@ const App: React.FC = () => {
         settings={voiceSettings}
         onSettingsChange={setVoiceSettings}
       />
-      <MoodDashboard
-        isOpen={isDashboardOpen}
-        onClose={() => setIsDashboardOpen(false)}
-        messages={messages}
-      />
       <TechnicalInfoPanel 
         isOpen={isTechInfoOpen}
         onClose={() => setIsTechInfoOpen(false)}
       />
-      {isBreathingExerciseOpen && (
-          <BreathingExercise onClose={() => setIsBreathingExerciseOpen(false)} />
-      )}
     </div>
   );
 };

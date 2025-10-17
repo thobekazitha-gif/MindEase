@@ -1,15 +1,22 @@
 // FIX: Define shared TypeScript types for the application.
+
+export interface Visual {
+  description: string;
+  type: string;
+  source: string;
+}
+
 export interface Message {
   id: string;
   text: string;
   sender: 'user' | 'assistant';
   timestamp: number;
-  moodScore?: number;
   isLoading?: boolean;
-  isStreaming?: boolean;
-  type?: 'summary' | 'breathing_suggestion' | 'visual_aid_offer' | 'generated_image';
-  imageGenerationPrompt?: string;
-  imageData?: string;
+  isStreaming?: boolean; // Indicates the AI is "thinking"
+  visuals?: Visual[];
+  references?: string[];
+  // FIX: Add optional moodScore to support mood tracking feature.
+  moodScore?: number;
 }
 
 export interface VoiceSettings {

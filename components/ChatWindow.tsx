@@ -1,83 +1,73 @@
 import React, { useRef, useEffect } from 'react';
-import { Message } from '../types';
-import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon } from './icons';
+import { Message, Visual } from '../types';
+import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon, TableIcon, LinkIcon, LightbulbIcon } from './icons';
 
 interface ChatWindowProps {
   messages: Message[];
-  onStartBreathingExercise: () => void;
-  onGenerateImage: (prompt: string) => void;
 }
 
-// FIX: Implement the MessageItem component to render individual chat bubbles.
-const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => void; onGenerateImage: (prompt: string) => void; }> = ({ message, onStartBreathingExercise, onGenerateImage }) => {
+const VisualIcon: React.FC<{type: string}> = ({ type }) => {
+    switch(type.toLowerCase()) {
+        case 'table':
+            return <TableIcon className="w-5 h-5 text-cyan-400" />;
+        case 'diagram':
+        case 'illustration':
+        case 'chart':
+            return <PhotographIcon className="w-5 h-5 text-cyan-400" />;
+        default:
+            // FIX: LightbulbIcon was used without being imported, causing an error.
+            return <LightbulbIcon className="w-5 h-5 text-cyan-400" />;
+    }
+}
+
+const VisualsDisplay: React.FC<{ visuals: Visual[] }> = ({ visuals }) => (
+    <div className="mt-4 pt-3 border-t border-slate-600/50">
+        <h4 className="text-sm font-bold text-slate-300 mb-2">Visual Aids Suggested</h4>
+        <ul className="space-y-3">
+            {visuals.map((visual, index) => (
+                <li key={index} className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-1">
+                        <VisualIcon type={visual.type} />
+                    </div>
+                    <div>
+                        <p className="text-slate-300 text-sm leading-snug">{visual.description}</p>
+                        <a href={visual.source} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-400 hover:text-violet-400 transition-colors inline-flex items-center gap-1">
+                            Based on source
+                            <LinkIcon className="w-3 h-3" />
+                        </a>
+                    </div>
+                </li>
+            ))}
+        </ul>
+    </div>
+);
+
+const ReferencesDisplay: React.FC<{ references: string[] }> = ({ references }) => (
+    <div className="mt-4 pt-3 border-t border-slate-600/50">
+        <h4 className="text-sm font-bold text-slate-300 mb-2">References</h4>
+        <ul className="space-y-1">
+            {references.map((ref, index) => {
+                const domain = new URL(ref).hostname;
+                return (
+                    <li key={index}>
+                        <a href={ref} target="_blank" rel="noopener noreferrer" className="text-sm text-violet-400 hover:underline flex items-center gap-2 group">
+                           <LinkIcon className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition-colors" />
+                           <span className="truncate">{domain}</span>
+                        </a>
+                    </li>
+                );
+            })}
+        </ul>
+    </div>
+);
+
+
+const MessageItem: React.FC<{ message: Message; }> = ({ message }) => {
   const isAssistant = message.sender === 'assistant';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
   };
-
-  if (message.type === 'breathing_suggestion') {
-    return (
-      <div className="my-4 p-4 bg-slate-700/50 border-l-4 border-teal-500 rounded-r-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <p className="text-slate-300">{message.text}</p>
-        <button
-            onClick={onStartBreathingExercise}
-            className="px-5 py-2 bg-teal-600 text-white font-semibold rounded-full hover:bg-teal-700 transition-colors flex-shrink-0 self-start sm:self-center"
-        >
-            Start Breathing Exercise
-        </button>
-      </div>
-    );
-  }
-
-  if (message.type === 'visual_aid_offer') {
-    return (
-      <div className="my-4 p-4 bg-slate-700/50 border-l-4 border-cyan-500 rounded-r-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <p className="text-slate-300">{message.text}</p>
-        <button
-          onClick={() => onGenerateImage(message.imageGenerationPrompt!)}
-          className="px-5 py-2 bg-cyan-600 text-white font-semibold rounded-full hover:bg-cyan-700 transition-colors flex-shrink-0 self-start sm:self-center flex items-center gap-2"
-        >
-          <PhotographIcon className="w-5 h-5" />
-          Create Diagram
-        </button>
-      </div>
-    );
-  }
-
-  if (message.type === 'generated_image') {
-    return (
-      <div className={`flex items-start gap-3 my-4`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-500 to-pink-500 text-white">
-          <BotIcon className="w-5 h-5" />
-        </div>
-        <div className="p-4 bg-slate-700 rounded-2xl rounded-tl-none max-w-sm md:max-w-md">
-            {message.isLoading ? (
-                <div className="flex items-center gap-3 text-slate-400">
-                    <LoadingSpinner />
-                    <span>Generating your diagram...</span>
-                </div>
-            ) : message.imageData ? (
-                <div>
-                    <h3 className="font-bold text-cyan-400 mb-2">{message.text}</h3>
-                    <img src={message.imageData} alt={message.imageGenerationPrompt} className="rounded-lg border border-slate-600" />
-                </div>
-            ) : (
-                <p className="text-red-400">Sorry, I couldn't create the diagram. Please try again.</p>
-            )}
-        </div>
-      </div>
-    );
-  }
-
-  if (message.type === 'summary') {
-    return (
-      <div className="my-4 p-4 bg-slate-700/50 border-l-4 border-violet-500 rounded-r-lg">
-        <h3 className="font-bold text-violet-400 mb-2">Session Reflection</h3>
-        <p className="text-slate-300 whitespace-pre-wrap">{message.text}</p>
-      </div>
-    );
-  }
 
   return (
     <div className={`flex items-start gap-3 my-4 ${isAssistant ? '' : 'flex-row-reverse'}`}>
@@ -92,7 +82,11 @@ const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => 
             <LoadingSpinner />
           </div>
         ) : (
-          <p className="whitespace-pre-wrap">{message.text}</p>
+          <div className="prose prose-sm prose-invert prose-p:my-2">
+            <p className="whitespace-pre-wrap">{message.text}</p>
+            {message.visuals && message.visuals.length > 0 && <VisualsDisplay visuals={message.visuals} />}
+            {message.references && message.references.length > 0 && <ReferencesDisplay references={message.references} />}
+          </div>
         )}
         {isAssistant && !message.isLoading && (
           <button
@@ -108,8 +102,7 @@ const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => 
   );
 };
 
-// FIX: Implement the ChatWindow component.
-export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathingExercise, onGenerateImage }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -121,14 +114,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathi
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} onStartBreathingExercise={onStartBreathingExercise} onGenerateImage={onGenerateImage} />
+        <MessageItem key={msg.id} message={msg} />
       ))}
-       {messages.length === 0 && (
-         <div className="text-center text-slate-500 mt-10">
-           <p>Start a conversation with MindEase.</p>
-           <p className="text-sm">How are you feeling today?</p>
-         </div>
-       )}
     </div>
   );
 };
