@@ -4,15 +4,30 @@ import { BotIcon, LoadingSpinner, ClipboardIcon } from './icons';
 
 interface ChatWindowProps {
   messages: Message[];
+  onStartBreathingExercise: () => void;
 }
 
 // FIX: Implement the MessageItem component to render individual chat bubbles.
-const MessageItem: React.FC<{ message: Message }> = ({ message }) => {
+const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => void; }> = ({ message, onStartBreathingExercise }) => {
   const isAssistant = message.sender === 'assistant';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
   };
+
+  if (message.type === 'breathing_suggestion') {
+    return (
+      <div className="my-4 p-4 bg-slate-700/50 border-l-4 border-teal-500 rounded-r-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <p className="text-slate-300">{message.text}</p>
+        <button
+            onClick={onStartBreathingExercise}
+            className="px-5 py-2 bg-teal-600 text-white font-semibold rounded-full hover:bg-teal-700 transition-colors flex-shrink-0 self-start sm:self-center"
+        >
+            Start Breathing Exercise
+        </button>
+      </div>
+    );
+  }
 
   if (message.type === 'summary') {
     return (
@@ -53,7 +68,7 @@ const MessageItem: React.FC<{ message: Message }> = ({ message }) => {
 };
 
 // FIX: Implement the ChatWindow component.
-export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathingExercise }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +80,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} />
+        <MessageItem key={msg.id} message={msg} onStartBreathingExercise={onStartBreathingExercise} />
       ))}
        {messages.length === 0 && (
          <div className="text-center text-slate-500 mt-10">

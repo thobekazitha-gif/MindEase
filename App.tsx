@@ -120,11 +120,6 @@ const App: React.FC = () => {
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
-    // Breathing exercise suggestion logic
-    if (text.toLowerCase().includes('breathing') || (moodScore && moodScore <= 3)) {
-        setTimeout(() => setIsBreathingExerciseOpen(true), 1500);
-    }
-
     try {
         if (!chatRef.current) {
             throw new Error("Chat not initialized");
@@ -170,6 +165,18 @@ const App: React.FC = () => {
                 msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
             )
         );
+
+        // Breathing exercise suggestion logic
+        if (text.toLowerCase().includes('breathing') || (moodScore && moodScore <= 3)) {
+            const suggestionMessage: Message = {
+                id: generateId(),
+                text: "It seems like a moment of calm could be helpful. Would you like to try a guided breathing exercise?",
+                sender: 'assistant',
+                timestamp: Date.now(),
+                type: 'breathing_suggestion',
+            };
+            setMessages(prev => [...prev, suggestionMessage]);
+        }
 
         // Summary generation logic (every 5 user messages)
         const userMessageCount = messages.filter(m => m.sender === 'user').length + 1;
@@ -219,7 +226,7 @@ const App: React.FC = () => {
         </main>
       ) : (
         <main className="flex-1 flex flex-col min-h-0 relative">
-          <ChatWindow messages={messages} />
+          <ChatWindow messages={messages} onStartBreathingExercise={() => setIsBreathingExerciseOpen(true)} />
           <div className="px-4">
               <Affirmation />
           </div>

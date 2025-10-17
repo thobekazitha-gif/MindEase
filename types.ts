@@ -7,7 +7,7 @@ export interface Message {
   moodScore?: number;
   isLoading?: boolean;
   isStreaming?: boolean;
-  type?: 'summary';
+  type?: 'summary' | 'breathing_suggestion';
 }
 
 export interface VoiceSettings {
