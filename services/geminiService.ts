@@ -4,14 +4,16 @@ import { VoiceSettings, Message } from "../types";
 // Lazy-initialize to prevent app crash on load if API key is missing.
 let ai: GoogleGenAI | null = null;
 
+// 🔑 Gemini API Key (hardcoded as requested)
+const GEMINI_API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
+
 // 🧠 Initialize Gemini
-// FIX: Use process.env.API_KEY instead of a hardcoded key for security, as per guidelines.
 export const getAi = (): GoogleGenAI => {
   if (!ai) {
-    if (!process.env.API_KEY) {
-      throw new Error("Configuration Error: Google API key not set.");
+    if (!GEMINI_API_KEY) {
+      throw new Error("Configuration Error: Gemini API key not set.");
     }
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
   }
   return ai;
 };
@@ -34,8 +36,7 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     return base64Audio || null;
-  } catch (error)
-  {
+  } catch (error) {
     console.error("Error getting audio:", error);
     throw new Error(`TTS API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -45,23 +46,20 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
 export const generateImage = async (prompt: string): Promise<string | null> => {
   try {
     const result = await getAi().models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-            parts: [{ text: prompt }],
-        },
-        config: {
-            responseModalities: [Modality.IMAGE],
-        },
+      model: 'gemini-2.5-flash-image',
+      contents: { parts: [{ text: prompt }] },
+      config: { responseModalities: [Modality.IMAGE] },
     });
+
     for (const part of result.candidates[0].content.parts) {
-        if (part.inlineData) {
-            const base64ImageBytes: string = part.inlineData.data;
-            return `data:image/png;base64,${base64ImageBytes}`;
-        }
+      if (part.inlineData) {
+        const base64ImageBytes: string = part.inlineData.data;
+        return `data:image/png;base64,${base64ImageBytes}`;
+      }
     }
     return null;
   } catch (error) {
-      console.error("Error generating image:", error);
-      throw new Error(`Image generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error generating image:", error);
+    throw new Error(`Image generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
