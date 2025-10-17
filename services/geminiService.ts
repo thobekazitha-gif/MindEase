@@ -4,16 +4,11 @@ import { VoiceSettings, Message } from "../types";
 // Lazy-initialize to prevent app crash on load if API key is missing.
 let ai: GoogleGenAI | null = null;
 
-// 🔑 Gemini API Key (hardcoded as requested)
-const GEMINI_API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
-
 // 🧠 Initialize Gemini
 export const getAi = (): GoogleGenAI => {
   if (!ai) {
-    if (!GEMINI_API_KEY) {
-      throw new Error("Configuration Error: Gemini API key not set.");
-    }
-    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    // FIX: The API key must be sourced from environment variables, not hardcoded.
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
   return ai;
 };

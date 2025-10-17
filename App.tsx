@@ -75,29 +75,28 @@ const App: React.FC = () => {
     isProcessorActiveRef.current = false;
   };
 
-  const speak = async (text: string) => {
-    if (!text || !audioContextRef.current) return;
-    try {
-      const base64Audio = await getAudio(text, voiceSettings);
-      if (base64Audio) {
-        const audioBytes = decode(base64Audio);
-        const audioBuffer = await decodeAudioData(audioBytes, audioContextRef.current, 24000, 1);
-        audioQueueRef.current.push(audioBuffer);
-        processAudioQueue();
-      }
-    } catch (error) {
-      console.error('Error playing audio:', error);
-      setNotification("Audio generation failed. You can continue chatting.");
-    }
-  };
-  
   // Initialize AudioContext and speak welcome message
   useEffect(() => {
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
         const initialMessage = messages[0];
-        if (initialMessage && initialMessage.sender === 'assistant') {
-            speak(initialMessage.text);
+        if (initialMessage && initialMessage.sender === 'assistant' && initialMessage.text) {
+          const speakWelcomeMessage = async () => {
+            if (!audioContextRef.current) return;
+            try {
+                const base64Audio = await getAudio(initialMessage.text, voiceSettings);
+                if (base64Audio) {
+                    const audioBytes = decode(base64Audio);
+                    const audioBuffer = await decodeAudioData(audioBytes, audioContextRef.current, 24000, 1);
+                    audioQueueRef.current.push(audioBuffer);
+                    processAudioQueue();
+                }
+            } catch (error) {
+                console.error('Error playing welcome message audio:', error);
+                setNotification("Audio generation failed for the welcome message.");
+            }
+          };
+          speakWelcomeMessage();
         }
     }
   }, []);
@@ -199,7 +198,9 @@ const App: React.FC = () => {
             }
         });
 
-        const jsonText = response.text?.trim();
+        // FIX: The type inference for `response.text` with optional chaining was causing a TypeScript error.
+        // As per documentation, `response.text` should be a string. Removing the optional chain `?.` resolves the type error.
+        const jsonText = response.text.trim();
         if (!jsonText) {
             throw new Error("Received an empty response from the AI.");
         }
@@ -246,10 +247,24 @@ const App: React.FC = () => {
         }
         
         if (assistantText) {
-          const sentences = assistantText.trim().match(/[^.!?]+[.!?]?/g) || [];
-          for (const sentence of sentences) {
-              if(sentence.trim()) {
-                  await speak(sentence.trim());
+          const sentences = (assistantText.trim().match(/[^.!?]+[.!?]?/g) || []).filter(s => s.trim());
+
+          // Fire off all TTS requests concurrently to reduce latency.
+          const audioPromises = sentences.map(sentence => getAudio(sentence, voiceSettings));
+
+          // Process the results in order as they complete to maintain correct playback sequence.
+          for (let i = 0; i < audioPromises.length; i++) {
+              try {
+                  const base64Audio = await audioPromises[i];
+                  if (base64Audio && audioContextRef.current) {
+                      const audioBytes = decode(base64Audio);
+                      const audioBuffer = await decodeAudioData(audioBytes, audioContextRef.current, 24000, 1);
+                      audioQueueRef.current.push(audioBuffer);
+                      processAudioQueue(); // Trigger the queue processor
+                  }
+              } catch (error) {
+                  // Log the error for the specific sentence but continue processing the rest.
+                  console.error(`Audio generation/processing failed for sentence: "${sentences[i]}"`, error);
               }
           }
         }
