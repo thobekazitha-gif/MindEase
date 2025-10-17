@@ -72,7 +72,8 @@ export const analyzeMood = async (message: string): Promise<number | null> => {
     return null;
   } catch (error) {
     console.error("Error analyzing mood:", error);
-    return null;
+    // Propagate the error to be handled by the caller UI
+    throw new Error(`Mood analysis API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -99,7 +100,8 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
     return null;
   } catch (error) {
     console.error("Error getting audio:", error);
-    return null;
+    // Propagate the error to be handled by the caller UI
+    throw new Error(`TTS API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -132,6 +134,7 @@ export const generateSummary = async (conversationHistory: Message[]): Promise<s
     return null;
   } catch (error) {
     console.error("Error generating summary:", error);
-    return null;
+    // Propagate the error to be handled by the caller UI
+    throw new Error(`Summary generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };

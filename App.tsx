@@ -14,13 +14,21 @@ import { analyzeMood, getAudio, generateSummary, getAi } from './services/gemini
 import { systemInstruction } from './data/prompts';
 
 const App: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: generateId(),
+      text: "Hello! I'm MindEase, your personal AI companion for reflection and support. I'm here to listen without judgment. To start, how are you feeling today?",
+      sender: 'assistant',
+      timestamp: Date.now(),
+    }
+  ]);
   const [isSending, setIsSending] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
   const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
     voice: 'Kore',
@@ -36,6 +44,16 @@ const App: React.FC = () => {
   useEffect(() => {
     audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
   }, []);
+  
+  // Effect to clear notifications after a delay
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 5000); // clear after 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   // Initialize Gemini Chat
   useEffect(() => {
@@ -91,22 +109,28 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('Error playing audio:', error);
+      setNotification("Audio generation failed. You can continue chatting.");
     }
   };
   
   const handleSendMessage = async (text: string) => {
     setIsSending(true);
 
+    let moodScoreResult: number | undefined;
+    try {
+        moodScoreResult = (await analyzeMood(text)) ?? undefined;
+    } catch (error) {
+        console.error("Mood analysis failed, continuing without it:", error);
+        // This is a non-critical background task, so we don't notify the user.
+    }
+
     const userMessage: Message = {
       id: generateId(),
       text,
       sender: 'user',
       timestamp: Date.now(),
+      moodScore: moodScoreResult,
     };
-
-    // Analyze mood and add to user message
-    const moodScore = await analyzeMood(text);
-    userMessage.moodScore = moodScore ?? undefined;
 
     const assistantMessageId = generateId();
     const assistantMessage: Message = {
@@ -154,7 +178,7 @@ const App: React.FC = () => {
         );
 
         // Breathing exercise suggestion logic
-        if (text.toLowerCase().includes('breathing') || (moodScore && moodScore <= 3)) {
+        if (text.toLowerCase().includes('breathing') || (userMessage.moodScore && userMessage.moodScore <= 3)) {
             const suggestionMessage: Message = {
                 id: generateId(),
                 text: "It seems like a moment of calm could be helpful. Would you like to try a guided breathing exercise?",
@@ -165,30 +189,40 @@ const App: React.FC = () => {
             setMessages(prev => [...prev, suggestionMessage]);
         }
 
-        // Summary generation logic (every 5 user messages)
+        // Summary generation logic (every 5 user messages) with graceful failure
         const userMessageCount = messages.filter(m => m.sender === 'user').length + 1;
         if (userMessageCount % 5 === 0) {
-           const summaryText = await generateSummary([...messages, userMessage, { ...assistantMessage, text: fullResponse }]);
-           if(summaryText) {
-             const summaryMessage: Message = {
-                id: generateId(),
-                text: summaryText,
-                sender: 'assistant',
-                timestamp: Date.now(),
-                type: 'summary',
-             };
-             setMessages(prev => [...prev, summaryMessage]);
-             speak("Here's a little reflection on our chat so far.");
-             speak(summaryText);
+           try {
+               const summaryText = await generateSummary([...messages, userMessage, { ...assistantMessage, text: fullResponse }]);
+               if(summaryText) {
+                 const summaryMessage: Message = {
+                    id: generateId(),
+                    text: summaryText,
+                    sender: 'assistant',
+                    timestamp: Date.now(),
+                    type: 'summary',
+                 };
+                 setMessages(prev => [...prev, summaryMessage]);
+                 // Note: The `speak` inside `generateSummary` uses ElevenLabs and has its own error handling.
+                 // The Gemini text part is handled by this try/catch.
+               }
+           } catch(error) {
+               console.error("Summary generation failed, continuing without it:", error);
+               // This is a non-critical background task, no user notification needed.
            }
         }
 
     } catch (error) {
       console.error('Error sending message:', error);
+      // Provide more specific, actionable error messages in the chat.
+      const errorMessage = (error instanceof Error && error.message.toLowerCase().includes('api key'))
+        ? "I can't connect due to a configuration issue. Please inform the administrator."
+        : "I'm having trouble connecting. Please check your internet connection and try again in a moment.";
+      
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
-            ? { ...msg, text: "I'm having trouble connecting right now. Please try again in a moment.", isLoading: false, isStreaming: false }
+            ? { ...msg, text: errorMessage, isLoading: false, isStreaming: false }
             : msg
         )
       );
@@ -220,6 +254,15 @@ const App: React.FC = () => {
           <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
         </main>
       )}
+
+      {/* Notification Toast for non-critical errors */}
+      {notification && (
+          <div className="fixed bottom-24 sm:bottom-6 right-6 bg-red-600 text-white p-3 rounded-lg shadow-lg z-50 transition-opacity duration-300">
+              <p className="font-bold text-sm">A small hiccup!</p>
+              <p className="text-xs">{notification}</p>
+          </div>
+      )}
+
       <SettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
