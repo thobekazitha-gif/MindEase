@@ -58,7 +58,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? "Listening..." : "How are you feeling?"}
+            placeholder={isListening ? "Listening..." : "Ask about a topic or problem..."}
             className="flex-grow p-3 bg-slate-700 rounded-full text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 border border-transparent focus:border-violet-500"
             disabled={isSending || isListening}
           />

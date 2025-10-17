@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: generateId(),
-      text: "Hello! I'm MindEase, your personal AI companion for reflection and support. I'm here to listen without judgment. To start, how are you feeling today?",
+      text: "Hello! I'm your AI Study Buddy from MindEase. I can help you with homework, explain complex topics, and get you ready for tests. What subject are we focusing on today?",
       sender: 'assistant',
       timestamp: Date.now(),
     }
@@ -83,8 +83,8 @@ const App: React.FC = () => {
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
         
-        // Speak the initial message once audio context is ready.
-        // Note: This may be blocked by browser autoplay policies until a user interaction.
+        // Queue the initial message to be spoken. It will be played after the first user interaction
+        // due to browser autoplay policies.
         const initialMessage = messages[0];
         if (initialMessage && initialMessage.sender === 'assistant') {
             speak(initialMessage.text);
@@ -123,9 +123,12 @@ const App: React.FC = () => {
   }, []);
   
   const handleSendMessage = async (text: string) => {
-    // Resume AudioContext if it's suspended, as user interaction has occurred.
+    // Resume AudioContext if it's suspended. This is crucial for browsers that block autoplay.
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume().catch(e => console.error("Error resuming AudioContext:", e));
+      audioContextRef.current.resume().then(() => {
+          // After resuming, try to play anything that was queued before interaction (i.e., the welcome message).
+          playNextInQueue();
+      }).catch(e => console.error("Error resuming AudioContext:", e));
     }
 
     setIsSending(true);
@@ -179,12 +182,12 @@ const App: React.FC = () => {
             );
         }
         
-        // Speak the response sentence by sentence to reduce perceived lag
+        // Await each speak call to ensure sentences are fetched and queued sequentially.
         if (fullResponse.trim()) {
             const sentences = fullResponse.trim().match(/[^.!?]+[.!?]?/g) || [];
             for (const sentence of sentences) {
                 if(sentence.trim()) {
-                    speak(sentence.trim());
+                    await speak(sentence.trim());
                 }
             }
         }
@@ -222,11 +225,11 @@ const App: React.FC = () => {
                     type: 'summary',
                  };
                  setMessages(prev => [...prev, summaryMessage]);
-                 // Speak the summary using the unified audio system
+                 // Speak the summary, awaiting each sentence to prevent audio skipping.
                  const sentences = summaryText.trim().match(/[^.!?]+[.!?]?/g) || [];
                  for (const sentence of sentences) {
                    if (sentence.trim()) {
-                     speak(sentence.trim());
+                     await speak(sentence.trim());
                    }
                  }
                }

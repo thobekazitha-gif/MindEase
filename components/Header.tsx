@@ -14,7 +14,7 @@ export const Header: React.FC<HeaderProps> = ({ onSettingsClick, onDashboardClic
         <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-pink-500">
           🧠 MindEase
         </h1>
-        <p className="text-sm text-slate-400">Your AI Mental Health & Motivation Assistant</p>
+        <p className="text-sm text-slate-400">Your AI Study Buddy</p>
       </div>
       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
         <button
