@@ -1,12 +1,13 @@
 import React from 'react';
-import { SettingsIcon, ChartBarIcon } from './icons';
+import { SettingsIcon, ChartBarIcon, DocumentTextIcon } from './icons';
 
 interface HeaderProps {
   onSettingsClick: () => void;
   onDashboardClick: () => void;
+  onTechInfoClick: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onSettingsClick, onDashboardClick }) => {
+export const Header: React.FC<HeaderProps> = ({ onSettingsClick, onDashboardClick, onTechInfoClick }) => {
   return (
     <header className="relative bg-slate-800/80 backdrop-blur-lg shadow-sm p-4 border-b border-slate-700 flex items-center justify-center">
       <div className="text-center">
@@ -29,6 +30,13 @@ export const Header: React.FC<HeaderProps> = ({ onSettingsClick, onDashboardClic
           aria-label="Open voice settings"
         >
           <SettingsIcon />
+        </button>
+        <button
+          onClick={onTechInfoClick}
+          className="p-2 rounded-full text-slate-400 hover:bg-slate-700 hover:text-violet-400 transition-colors"
+          aria-label="Open technical information"
+        >
+          <DocumentTextIcon />
         </button>
       </div>
     </header>

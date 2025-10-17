@@ -5,7 +5,7 @@ interface BreathingExerciseProps {
   onClose: () => void;
 }
 
-// FIX: Implement the BreathingExercise component.
+// Implement the BreathingExercise component.
 export const BreathingExercise: React.FC<BreathingExerciseProps> = ({ onClose }) => {
   const [instruction, setInstruction] = useState('Get ready...');
   const [phase, setPhase] = useState('ready'); // ready, in, hold, out
@@ -17,7 +17,8 @@ export const BreathingExercise: React.FC<BreathingExerciseProps> = ({ onClose })
       { phase: 'out', instruction: 'Breathe out...', duration: 8000 },
     ];
     let currentIndex = -1;
-    let timer: NodeJS.Timeout;
+    // Changed NodeJS.Timeout to ReturnType<typeof setTimeout> for browser compatibility.
+    let timer: ReturnType<typeof setTimeout>;
 
     const runSequence = () => {
       currentIndex = (currentIndex + 1) % sequence.length;

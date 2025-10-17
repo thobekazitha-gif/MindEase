@@ -7,6 +7,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { MoodDashboard } from './components/MoodDashboard';
 import { BreathingExercise } from './components/BreathingExercise';
 import { Affirmation } from './components/Affirmation';
+import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { Message, VoiceSettings } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
 import { analyzeMood, getAudio, generateSummary } from './services/geminiService';
@@ -18,6 +19,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
+  const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
     voice: 'Kore',
@@ -201,6 +203,7 @@ const App: React.FC = () => {
       <Header
         onSettingsClick={() => setIsSettingsOpen(true)}
         onDashboardClick={() => setIsDashboardOpen(true)}
+        onTechInfoClick={() => setIsTechInfoOpen(true)}
       />
       <main className="flex-1 flex flex-col min-h-0 relative">
         <ChatWindow messages={messages} />
@@ -219,6 +222,10 @@ const App: React.FC = () => {
         isOpen={isDashboardOpen}
         onClose={() => setIsDashboardOpen(false)}
         messages={messages}
+      />
+      <TechnicalInfoPanel 
+        isOpen={isTechInfoOpen}
+        onClose={() => setIsTechInfoOpen(false)}
       />
       {isBreathingExerciseOpen && (
           <BreathingExercise onClose={() => setIsBreathingExerciseOpen(false)} />

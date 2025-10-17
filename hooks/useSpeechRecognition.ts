@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Dispatch, SetStateAction } from 'react';
 
-// FIX: Add type definitions for Web Speech API as it might not be in the default TS lib.
+// Add type definitions for Web Speech API as it might not be in the default TS lib.
 // This resolves "Cannot find name 'SpeechRecognition'" and "Property 'SpeechRecognition' does not exist on type 'Window'".
 interface SpeechRecognitionResult {
   isFinal: boolean;
@@ -46,7 +46,8 @@ interface SpeechRecognitionHook {
   startListening: () => void;
   stopListening: () => void;
   error: string | null;
-  setTranscript: React.Dispatch<React.SetStateAction<string>>;
+  // Use Dispatch and SetStateAction types from react import instead of React namespace.
+  setTranscript: Dispatch<SetStateAction<string>>;
 }
 
 export const useSpeechRecognition = (): SpeechRecognitionHook => {
@@ -82,7 +83,7 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
       setIsListening(false);
     };
 
-    // FIX: Correctly process speech recognition results.
+    // Correctly process speech recognition results.
     // The previous implementation incorrectly appended transcript parts, leading to duplication.
     // This now rebuilds the full transcript from the results list on each event.
     recognition.onresult = (event) => {
@@ -98,7 +99,7 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
     return () => {
       recognition.stop();
     };
-    // FIX: The dependency array was [transcript], causing the recognition to restart on every update.
+    // The dependency array was [transcript], causing the recognition to restart on every update.
     // An empty array ensures it only runs once on mount.
   }, []);
 
