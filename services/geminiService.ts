@@ -20,31 +20,39 @@ export const getAi = (): GoogleGenAI => {
   return ai;
 };
 
-// 🗣️ ElevenLabs Speech Function
-async function speakText(text) {
+// 🗣️ ElevenLabs Speech Function (awaits audio before resolving)
+export async function speakText(text: string): Promise<void> {
   try {
-    const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": ELEVENLABS_API_KEY,
-      },
-      body: JSON.stringify({
-        text: text,
-        voice: "Rachel", // or replace with any of your available voices
-        model_id: "eleven_monolingual_v1",
-      }),
-    });
+    // Split text into sentences for smoother sync
+    const chunks = text.match(/[^.!?]+[.!?]?/g) || [text];
+    for (const chunk of chunks) {
+      const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": ELEVENLABS_API_KEY,
+        },
+        body: JSON.stringify({
+          text: chunk.trim(),
+          voice: "Rachel", // or your preferred voice
+          model_id: "eleven_monolingual_v1",
+        }),
+      });
 
-    if (!response.ok) {
-      console.error("Failed to generate speech:", response.statusText);
-      return;
+      if (!response.ok) {
+        console.error("Failed to generate speech:", response.statusText);
+        continue;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      await new Promise<void>((resolve) => {
+        audio.onended = () => resolve();
+        audio.play();
+      });
     }
-
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-    const audio = new Audio(audioUrl);
-    audio.play();
   } catch (error) {
     console.error("Error in speakText:", error);
   }
@@ -72,12 +80,11 @@ export const analyzeMood = async (message: string): Promise<number | null> => {
     return null;
   } catch (error) {
     console.error("Error analyzing mood:", error);
-    // Propagate the error to be handled by the caller UI
     throw new Error(`Mood analysis API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
-// 🔊 Gemini TTS (optional alternative)
+// 🔊 Gemini TTS (alternative to ElevenLabs)
 export const getAudio = async (text: string, voiceSettings: VoiceSettings): Promise<string | null> => {
   try {
     const response = await getAi().models.generateContent({
@@ -94,18 +101,14 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
     });
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (base64Audio) {
-      return base64Audio;
-    }
-    return null;
+    return base64Audio || null;
   } catch (error) {
     console.error("Error getting audio:", error);
-    // Propagate the error to be handled by the caller UI
     throw new Error(`TTS API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
-// 🧩 Generate Summary + Speak It
+// 🧩 Generate Summary + Speak It (synchronized)
 export const generateSummary = async (conversationHistory: Message[]): Promise<string | null> => {
   try {
     const formattedHistory = conversationHistory
@@ -121,20 +124,18 @@ export const generateSummary = async (conversationHistory: Message[]): Promise<s
     const response = await getAi().models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
-      config: {
-        temperature: 0.5,
-      },
+      config: { temperature: 0.5 },
     });
 
     const summaryText = response.text?.trim();
     if (summaryText) {
-      speakText(summaryText); // 🎤 Voice output
+      // 🎤 Play audio first, then resolve so UI can display after
+      await speakText(summaryText);
       return summaryText;
     }
     return null;
   } catch (error) {
     console.error("Error generating summary:", error);
-    // Propagate the error to be handled by the caller UI
     throw new Error(`Summary generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
