@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { SendIcon, MicrophoneIcon, StopIcon, LightbulbIcon } from './icons';
-import { journalPrompts } from '../data/journalPrompts';
+import { SendIcon, MicrophoneIcon, StopIcon } from './icons';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -9,21 +8,48 @@ interface ChatInputProps {
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
-  const [input, setInput] = useState('');
-  const { isListening, transcript, startListening, stopListening, setTranscript } = useSpeechRecognition();
+  const [inputValue, setInputValue] = useState('');
+  const {
+    transcript,
+    isListening,
+    startListening,
+    stopListening,
+    browserSupportsSpeechRecognition,
+  } = useSpeechRecognition();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (transcript) {
-      setInput(transcript);
+    if (isListening) {
+      setInputValue(transcript);
     }
-  }, [transcript]);
+  }, [transcript, isListening]);
+  
+  // Update input with final transcript when listening stops
+  useEffect(() => {
+    if (!isListening && transcript) {
+        setInputValue(transcript);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isListening]);
 
+
+  useEffect(() => {
+    // Auto-resize textarea
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${scrollHeight}px`;
+    }
+  }, [inputValue]);
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() && !isSending) {
-      onSendMessage(input.trim());
-      setInput('');
-      setTranscript('');
+    if (inputValue.trim() && !isSending) {
+      onSendMessage(inputValue.trim());
+      setInputValue('');
+      if (isListening) {
+        stopListening();
+      }
     }
   };
 
@@ -31,55 +57,48 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }
     if (isListening) {
       stopListening();
     } else {
-      setInput(''); // Clear input when starting to listen
       startListening();
     }
   };
 
-  const handleGetPrompt = () => {
-    const randomIndex = Math.floor(Math.random() * journalPrompts.length);
-    setInput(journalPrompts[randomIndex]);
-  };
-
   return (
-    <div>
-      <div className="pt-4 pb-6 px-4 bg-slate-800/80 backdrop-blur-lg border-t border-slate-700">
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleGetPrompt}
-            title="Get a journaling prompt"
-            className="p-2 rounded-full text-slate-400 hover:bg-slate-700 hover:text-violet-400 transition-colors flex-shrink-0"
-            aria-label="Get a journaling prompt"
-          >
-            <LightbulbIcon />
-          </button>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? "Listening..." : "Ask about a topic or problem..."}
-            className="flex-grow p-3 bg-slate-700 rounded-full text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 border border-transparent focus:border-violet-500"
-            disabled={isSending || isListening}
-          />
+    <div className="p-4 bg-slate-800/80 backdrop-blur-lg border-t border-slate-700">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2">
+        <textarea
+          ref={textareaRef}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+          placeholder={isListening ? 'Listening...' : 'Ask me anything about your studies...'}
+          rows={1}
+          className="flex-1 p-2 bg-slate-700 text-slate-200 rounded-lg resize-none focus:ring-2 focus:ring-violet-500 focus:outline-none transition max-h-32"
+          disabled={isSending}
+        />
+        {browserSupportsSpeechRecognition && (
           <button
             type="button"
             onClick={toggleListening}
-            className={`p-3 rounded-full text-white transition-colors flex-shrink-0 ${isListening ? 'bg-red-500' : 'bg-slate-600 hover:bg-slate-700'}`}
+            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+            disabled={isSending}
             aria-label={isListening ? 'Stop listening' : 'Start listening'}
           >
             {isListening ? <StopIcon /> : <MicrophoneIcon />}
           </button>
-          <button
-            type="submit"
-            disabled={isSending || !input.trim()}
-            className="p-3 bg-violet-600 rounded-full text-white hover:bg-violet-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors"
-            aria-label="Send message"
-          >
-            <SendIcon />
-          </button>
-        </form>
-      </div>
+        )}
+        <button
+          type="submit"
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-violet-600 text-white rounded-full hover:bg-violet-700 disabled:bg-slate-500 transition-colors"
+          disabled={isSending || !inputValue.trim()}
+          aria-label="Send message"
+        >
+          <SendIcon className="w-5 h-5" />
+        </button>
+      </form>
     </div>
   );
 };

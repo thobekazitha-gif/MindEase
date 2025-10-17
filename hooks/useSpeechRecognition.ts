@@ -1,60 +1,35 @@
-import { useState, useRef, useEffect, Dispatch, SetStateAction } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-// Add type definitions for Web Speech API as it might not be in the default TS lib.
-// This resolves "Cannot find name 'SpeechRecognition'" and "Property 'SpeechRecognition' does not exist on type 'Window'".
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  readonly [index: number]: { readonly transcript: string };
-}
-
-interface SpeechRecognitionResultList {
-  readonly [index: number]: SpeechRecognitionResult;
-  readonly length: number;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly results: SpeechRecognitionResultList;
-  readonly resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onstart: (() => void) | null;
-  onend: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
-
+// FIX: Define the props for the hook
 interface SpeechRecognitionHook {
   isListening: boolean;
   transcript: string;
   startListening: () => void;
   stopListening: () => void;
   error: string | null;
-  // Use Dispatch and SetStateAction types from react import instead of React namespace.
-  setTranscript: Dispatch<SetStateAction<string>>;
+  browserSupportsSpeechRecognition: boolean;
 }
 
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
+// FIX: Implement the useSpeechRecognition custom hook.
 export const useSpeechRecognition = (): SpeechRecognitionHook => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  }, [isListening]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -63,58 +38,54 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
       return;
     }
 
-    const recognition: SpeechRecognition = new SpeechRecognition();
+    const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      setError(null);
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      setTranscript(finalTranscript + interimTranscript);
     };
 
+    recognition.onerror = (event: any) => {
+      setError(event.error);
+      stopListening();
+    };
+    
     recognition.onend = () => {
       setIsListening(false);
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      setError(`Speech recognition error: ${event.error}`);
-      setIsListening(false);
-    };
-
-    // Correctly process speech recognition results.
-    // The previous implementation incorrectly appended transcript parts, leading to duplication.
-    // This now rebuilds the full transcript from the results list on each event.
-    recognition.onresult = (event) => {
-      const fullTranscript = Array.from(event.results)
-        .map((result) => result[0])
-        .map((result) => result.transcript)
-        .join('');
-      setTranscript(fullTranscript);
     };
 
     recognitionRef.current = recognition;
 
     return () => {
-      recognition.stop();
+      recognitionRef.current?.stop();
     };
-    // The dependency array was [transcript], causing the recognition to restart on every update.
-    // An empty array ensures it only runs once on mount.
-  }, []);
+  }, [stopListening]);
 
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       setTranscript('');
       recognitionRef.current.start();
+      setIsListening(true);
     }
   };
 
-  const stopListening = () => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
-    }
+  return {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    error,
+    browserSupportsSpeechRecognition: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
   };
-
-  return { isListening, transcript, startListening, stopListening, error, setTranscript };
 };
