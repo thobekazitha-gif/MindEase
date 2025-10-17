@@ -40,41 +40,6 @@ const App: React.FC = () => {
   const audioQueueRef = useRef<AudioBuffer[]>([]);
   const isPlayingRef = useRef(false);
 
-  // Initialize AudioContext
-  useEffect(() => {
-    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-  }, []);
-  
-  // Effect to clear notifications after a delay
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 5000); // clear after 5 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  // Initialize Gemini Chat
-  useEffect(() => {
-    const initChat = () => {
-      try {
-        const ai = getAi();
-        chatRef.current = ai.chats.create({
-          model: 'gemini-2.5-flash',
-          config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7,
-          },
-        });
-      } catch (e) {
-        console.error("Error initializing Gemini Chat:", e);
-        setError("An error occurred while initializing the AI assistant. Please try refreshing the page.");
-      }
-    };
-    initChat();
-  }, []);
-
   const playNextInQueue = () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
       return;
@@ -112,6 +77,50 @@ const App: React.FC = () => {
       setNotification("Audio generation failed. You can continue chatting.");
     }
   };
+  
+  // Initialize AudioContext and speak welcome message
+  useEffect(() => {
+    if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        
+        // Speak the initial message once audio context is ready.
+        // Note: This may be blocked by browser autoplay policies until a user interaction.
+        const initialMessage = messages[0];
+        if (initialMessage && initialMessage.sender === 'assistant') {
+            speak(initialMessage.text);
+        }
+    }
+  }, []); // This should run only once on mount.
+
+  // Effect to clear notifications after a delay
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 5000); // clear after 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  // Initialize Gemini Chat
+  useEffect(() => {
+    const initChat = () => {
+      try {
+        const ai = getAi();
+        chatRef.current = ai.chats.create({
+          model: 'gemini-2.5-flash',
+          config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.7,
+          },
+        });
+      } catch (e) {
+        console.error("Error initializing Gemini Chat:", e);
+        setError("An error occurred while initializing the AI assistant. Please try refreshing the page.");
+      }
+    };
+    initChat();
+  }, []);
   
   const handleSendMessage = async (text: string) => {
     setIsSending(true);
@@ -165,9 +174,14 @@ const App: React.FC = () => {
             );
         }
         
-        // Speak the full response after it has been completely streamed
+        // Speak the response sentence by sentence to reduce perceived lag
         if (fullResponse.trim()) {
-            speak(fullResponse.trim());
+            const sentences = fullResponse.trim().match(/[^.!?]+[.!?]?/g) || [];
+            for (const sentence of sentences) {
+                if(sentence.trim()) {
+                    speak(sentence.trim());
+                }
+            }
         }
 
         // Finalize assistant message

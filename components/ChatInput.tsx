@@ -48,6 +48,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }
           <button
             type="button"
             onClick={handleGetPrompt}
+            title="Get a journaling prompt"
             className="p-2 rounded-full text-slate-400 hover:bg-slate-700 hover:text-violet-400 transition-colors flex-shrink-0"
             aria-label="Get a journaling prompt"
           >

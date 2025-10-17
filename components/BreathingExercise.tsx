@@ -16,13 +16,28 @@ export const BreathingExercise: React.FC<BreathingExerciseProps> = ({ onClose })
       { phase: 'hold', instruction: 'Hold...', duration: 7000 },
       { phase: 'out', instruction: 'Breathe out...', duration: 8000 },
     ];
-    let currentIndex = -1;
+    const totalCycles = 3;
+    let cycleCount = 0;
+    let sequenceIndex = -1;
     // Changed NodeJS.Timeout to ReturnType<typeof setTimeout> for browser compatibility.
     let timer: ReturnType<typeof setTimeout>;
 
     const runSequence = () => {
-      currentIndex = (currentIndex + 1) % sequence.length;
-      const current = sequence[currentIndex];
+      sequenceIndex++;
+      
+      if (sequenceIndex >= sequence.length) {
+        sequenceIndex = 0;
+        cycleCount++;
+      }
+
+      if (cycleCount >= totalCycles) {
+        setInstruction('Complete.');
+        setPhase('ready');
+        setTimeout(onClose, 2000); // Close after 2 seconds
+        return;
+      }
+
+      const current = sequence[sequenceIndex];
       setPhase(current.phase);
       setInstruction(current.instruction);
       timer = setTimeout(runSequence, current.duration);
@@ -34,7 +49,7 @@ export const BreathingExercise: React.FC<BreathingExerciseProps> = ({ onClose })
       clearTimeout(readyTimer);
       clearTimeout(timer);
     };
-  }, []);
+  }, [onClose]);
 
   const getAnimationClasses = () => {
     switch (phase) {
