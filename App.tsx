@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
   const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
     voice: 'Kore',
@@ -39,15 +40,25 @@ const App: React.FC = () => {
   // Initialize Gemini Chat
   useEffect(() => {
     const initChat = () => {
-      // API Key is handled by environment variable
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-      chatRef.current = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.7,
-        },
-      });
+      try {
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+          setError("Configuration Error: The API key for the AI service is not set. Please contact the site administrator.");
+          console.error("API_KEY environment variable is not set.");
+          return;
+        }
+        const ai = new GoogleGenAI({ apiKey });
+        chatRef.current = ai.chats.create({
+          model: 'gemini-2.5-flash',
+          config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.7,
+          },
+        });
+      } catch (e) {
+        console.error("Error initializing Gemini Chat:", e);
+        setError("An error occurred while initializing the AI assistant. Please try refreshing the page.");
+      }
     };
     initChat();
   }, []);
@@ -205,13 +216,22 @@ const App: React.FC = () => {
         onDashboardClick={() => setIsDashboardOpen(true)}
         onTechInfoClick={() => setIsTechInfoOpen(true)}
       />
-      <main className="flex-1 flex flex-col min-h-0 relative">
-        <ChatWindow messages={messages} />
-        <div className="px-4">
-            <Affirmation />
-        </div>
-        <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
-      </main>
+      {error ? (
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-red-500/50 p-6 rounded-lg max-w-md text-center shadow-lg">
+            <h2 className="text-xl font-bold text-red-400 mb-2">Application Error</h2>
+            <p className="text-slate-300">{error}</p>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 flex flex-col min-h-0 relative">
+          <ChatWindow messages={messages} />
+          <div className="px-4">
+              <Affirmation />
+          </div>
+          <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
+        </main>
+      )}
       <SettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
