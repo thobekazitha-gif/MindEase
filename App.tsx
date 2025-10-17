@@ -123,6 +123,11 @@ const App: React.FC = () => {
   }, []);
   
   const handleSendMessage = async (text: string) => {
+    // Resume AudioContext if it's suspended, as user interaction has occurred.
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume().catch(e => console.error("Error resuming AudioContext:", e));
+    }
+
     setIsSending(true);
 
     let moodScoreResult: number | undefined;
@@ -217,8 +222,13 @@ const App: React.FC = () => {
                     type: 'summary',
                  };
                  setMessages(prev => [...prev, summaryMessage]);
-                 // Note: The `speak` inside `generateSummary` uses ElevenLabs and has its own error handling.
-                 // The Gemini text part is handled by this try/catch.
+                 // Speak the summary using the unified audio system
+                 const sentences = summaryText.trim().match(/[^.!?]+[.!?]?/g) || [];
+                 for (const sentence of sentences) {
+                   if (sentence.trim()) {
+                     speak(sentence.trim());
+                   }
+                 }
                }
            } catch(error) {
                console.error("Summary generation failed, continuing without it:", error);

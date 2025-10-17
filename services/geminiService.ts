@@ -7,7 +7,6 @@ let ai: GoogleGenAI | null = null;
 
 // 🔑 API Keys
 const GOOGLE_API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
-const ELEVENLABS_API_KEY = "sk_f4740f565c5d93a0a27da7bed04d7fe28ff74f099be9ee09";
 
 // 🧠 Initialize Gemini
 export const getAi = (): GoogleGenAI => {
@@ -19,44 +18,6 @@ export const getAi = (): GoogleGenAI => {
   }
   return ai;
 };
-
-// 🗣️ ElevenLabs Speech Function (awaits audio before resolving)
-export async function speakText(text: string): Promise<void> {
-  try {
-    // Split text into sentences for smoother sync
-    const chunks = text.match(/[^.!?]+[.!?]?/g) || [text];
-    for (const chunk of chunks) {
-      const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": ELEVENLABS_API_KEY,
-        },
-        body: JSON.stringify({
-          text: chunk.trim(),
-          voice: "Rachel", // or your preferred voice
-          model_id: "eleven_monolingual_v1",
-        }),
-      });
-
-      if (!response.ok) {
-        console.error("Failed to generate speech:", response.statusText);
-        continue;
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      await new Promise<void>((resolve) => {
-        audio.onended = () => resolve();
-        audio.play();
-      });
-    }
-  } catch (error) {
-    console.error("Error in speakText:", error);
-  }
-}
 
 // 🎭 Mood Analysis
 export const analyzeMood = async (message: string): Promise<number | null> => {
@@ -84,7 +45,7 @@ export const analyzeMood = async (message: string): Promise<number | null> => {
   }
 };
 
-// 🔊 Gemini TTS (alternative to ElevenLabs)
+// 🔊 Gemini TTS
 export const getAudio = async (text: string, voiceSettings: VoiceSettings): Promise<string | null> => {
   try {
     const response = await getAi().models.generateContent({
@@ -108,7 +69,7 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
   }
 };
 
-// 🧩 Generate Summary + Speak It (synchronized)
+// 🧩 Generate Summary
 export const generateSummary = async (conversationHistory: Message[]): Promise<string | null> => {
   try {
     const formattedHistory = conversationHistory
@@ -128,12 +89,7 @@ export const generateSummary = async (conversationHistory: Message[]): Promise<s
     });
 
     const summaryText = response.text?.trim();
-    if (summaryText) {
-      // 🎤 Play audio first, then resolve so UI can display after
-      await speakText(summaryText);
-      return summaryText;
-    }
-    return null;
+    return summaryText || null;
   } catch (error) {
     console.error("Error generating summary:", error);
     throw new Error(`Summary generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
