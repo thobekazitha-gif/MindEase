@@ -103,3 +103,11 @@ export const DocumentTextIcon = (props: React.SVGProps<SVGSVGElement>) => (
         <polyline points="10 9 9 9 8 9" />
     </IconBase>
 );
+
+export const PhotographIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <IconBase {...props}>
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+    </IconBase>
+);

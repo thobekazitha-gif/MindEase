@@ -7,7 +7,9 @@ export interface Message {
   moodScore?: number;
   isLoading?: boolean;
   isStreaming?: boolean;
-  type?: 'summary' | 'breathing_suggestion';
+  type?: 'summary' | 'breathing_suggestion' | 'visual_aid_offer' | 'generated_image';
+  imageGenerationPrompt?: string;
+  imageData?: string;
 }
 
 export interface VoiceSettings {

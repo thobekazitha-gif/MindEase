@@ -10,7 +10,7 @@ import { Affirmation } from './components/Affirmation';
 import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { Message, VoiceSettings } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
-import { analyzeMood, getAudio, generateSummary, getAi } from './services/geminiService';
+import { analyzeMood, getAudio, generateSummary, getAi, generateImage } from './services/geminiService';
 import { systemInstruction } from './data/prompts';
 
 const App: React.FC = () => {
@@ -38,28 +38,38 @@ const App: React.FC = () => {
   const chatRef = useRef<Chat | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<AudioBuffer[]>([]);
-  const isPlayingRef = useRef(false);
+  const isProcessorActiveRef = useRef(false);
 
-  const playNextInQueue = () => {
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) {
+  // A more robust, async queue processor for audio playback.
+  const processAudioQueue = async () => {
+    if (isProcessorActiveRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current || audioContextRef.current.state !== 'running') {
       return;
     }
-    isPlayingRef.current = true;
-    const audioBuffer = audioQueueRef.current.shift();
+    isProcessorActiveRef.current = true;
 
-    if (audioBuffer && audioContextRef.current) {
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBuffer;
-      source.playbackRate.value = voiceSettings.rate;
-      source.connect(audioContextRef.current.destination);
-      source.onended = () => {
-        isPlayingRef.current = false;
-        playNextInQueue();
-      };
-      source.start();
-    } else {
-      isPlayingRef.current = false;
+    while (audioQueueRef.current.length > 0) {
+      const audioBuffer = audioQueueRef.current.shift();
+      if (audioBuffer) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            if (!audioContextRef.current) {
+              reject(new Error("AudioContext is not available."));
+              return;
+            }
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = audioBuffer;
+            source.playbackRate.value = voiceSettings.rate;
+            source.connect(audioContextRef.current.destination);
+            source.onended = () => resolve();
+            source.start();
+          });
+        } catch (error) {
+            console.error("Error playing audio from queue:", error);
+            // If one buffer fails, we should continue with the next.
+        }
+      }
     }
+    isProcessorActiveRef.current = false;
   };
 
   const speak = async (text: string) => {
@@ -70,7 +80,7 @@ const App: React.FC = () => {
         const audioBytes = decode(base64Audio);
         const audioBuffer = await decodeAudioData(audioBytes, audioContextRef.current, 24000, 1);
         audioQueueRef.current.push(audioBuffer);
-        playNextInQueue();
+        processAudioQueue(); // This will start the processor if it's not already running.
       }
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -122,12 +132,43 @@ const App: React.FC = () => {
     initChat();
   }, []);
   
+  const handleGenerateImage = async (prompt: string) => {
+    const imageMessageId = generateId();
+    const loadingMessage: Message = {
+        id: imageMessageId,
+        sender: 'assistant',
+        text: "Here's a diagram to help:",
+        timestamp: Date.now(),
+        type: 'generated_image',
+        isLoading: true,
+        imageGenerationPrompt: prompt,
+    };
+    setMessages(prev => [...prev, loadingMessage]);
+
+    try {
+        const imageData = await generateImage(prompt);
+        setMessages(prev => prev.map(msg => 
+            msg.id === imageMessageId 
+            ? { ...msg, isLoading: false, imageData: imageData ?? undefined } 
+            : msg
+        ));
+    } catch (error) {
+        console.error("Image generation failed:", error);
+        setMessages(prev => prev.map(msg => 
+            msg.id === imageMessageId 
+            ? { ...msg, isLoading: false, imageData: undefined } 
+            : msg
+        ));
+        setNotification("Diagram generation failed. Please try again.");
+    }
+  };
+
   const handleSendMessage = async (text: string) => {
     // Resume AudioContext if it's suspended. This is crucial for browsers that block autoplay.
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume().then(() => {
-          // After resuming, try to play anything that was queued before interaction (i.e., the welcome message).
-          playNextInQueue();
+          // After resuming, start the processor to play anything that was queued before interaction.
+          processAudioQueue();
       }).catch(e => console.error("Error resuming AudioContext:", e));
     }
 
@@ -181,24 +222,50 @@ const App: React.FC = () => {
                 )
             );
         }
-        
-        // Await each speak call to ensure sentences are fetched and queued sequentially.
-        if (fullResponse.trim()) {
-            const sentences = fullResponse.trim().match(/[^.!?]+[.!?]?/g) || [];
-            for (const sentence of sentences) {
-                if(sentence.trim()) {
-                    await speak(sentence.trim());
+
+        // Check for visual aid offer
+        const offerMatch = fullResponse.match(/\[VISUAL_AID_OFFER:\s*(.*?)\]/);
+        if (offerMatch) {
+            const imagePrompt = offerMatch[1];
+            const cleanedResponse = fullResponse.replace(offerMatch[0], '').trim();
+
+            // Update original message with cleaned text
+            setMessages((prev) =>
+                prev.map((msg) =>
+                    msg.id === assistantMessageId ? { ...msg, text: cleanedResponse, isStreaming: false } : msg
+                )
+            );
+
+            // Add the offer message
+            const offerMessage: Message = {
+                id: generateId(),
+                sender: 'assistant',
+                text: "It looks like a diagram might help here. Shall I create one?",
+                timestamp: Date.now(),
+                type: 'visual_aid_offer',
+                imageGenerationPrompt: imagePrompt,
+            };
+            setMessages(prev => [...prev, offerMessage]);
+            await speak(cleanedResponse); // Speak the cleaned response first
+
+        } else {
+            // Await each speak call to ensure sentences are fetched and queued sequentially.
+            if (fullResponse.trim()) {
+                const sentences = fullResponse.trim().match(/[^.!?]+[.!?]?/g) || [];
+                for (const sentence of sentences) {
+                    if(sentence.trim()) {
+                        await speak(sentence.trim());
+                    }
                 }
             }
+             // Finalize assistant message
+            setMessages((prev) =>
+                prev.map((msg) =>
+                    msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
+                )
+            );
         }
-
-        // Finalize assistant message
-        setMessages((prev) =>
-            prev.map((msg) =>
-                msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
-            )
-        );
-
+       
         // Breathing exercise suggestion logic
         if (text.toLowerCase().includes('breathing') || (userMessage.moodScore && userMessage.moodScore <= 3)) {
             const suggestionMessage: Message = {
@@ -274,7 +341,11 @@ const App: React.FC = () => {
         </main>
       ) : (
         <main className="flex-1 flex flex-col min-h-0 relative">
-          <ChatWindow messages={messages} onStartBreathingExercise={() => setIsBreathingExerciseOpen(true)} />
+          <ChatWindow 
+            messages={messages} 
+            onStartBreathingExercise={() => setIsBreathingExerciseOpen(false)}
+            onGenerateImage={handleGenerateImage} 
+          />
           <div className="px-4">
               <Affirmation />
           </div>

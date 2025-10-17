@@ -63,11 +63,38 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     return base64Audio || null;
-  } catch (error) {
+  } catch (error)
+  {
     console.error("Error getting audio:", error);
     throw new Error(`TTS API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
+
+// 🖼️ Generate Image
+export const generateImage = async (prompt: string): Promise<string | null> => {
+    try {
+        const response = await getAi().models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+              parts: [{ text: prompt }],
+            },
+            config: {
+                responseModalities: [Modality.IMAGE],
+            },
+        });
+
+        const part = response.candidates?.[0]?.content?.parts?.[0];
+        if (part?.inlineData?.data) {
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:image/png;base64,${base64ImageBytes}`;
+        }
+        return null;
+    } catch (error) {
+        console.error("Error generating image:", error);
+        throw new Error(`Image generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+};
+
 
 // 🧩 Generate Summary
 export const generateSummary = async (conversationHistory: Message[]): Promise<string | null> => {

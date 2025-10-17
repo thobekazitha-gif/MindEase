@@ -1,14 +1,15 @@
 import React, { useRef, useEffect } from 'react';
 import { Message } from '../types';
-import { BotIcon, LoadingSpinner, ClipboardIcon } from './icons';
+import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon } from './icons';
 
 interface ChatWindowProps {
   messages: Message[];
   onStartBreathingExercise: () => void;
+  onGenerateImage: (prompt: string) => void;
 }
 
 // FIX: Implement the MessageItem component to render individual chat bubbles.
-const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => void; }> = ({ message, onStartBreathingExercise }) => {
+const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => void; onGenerateImage: (prompt: string) => void; }> = ({ message, onStartBreathingExercise, onGenerateImage }) => {
   const isAssistant = message.sender === 'assistant';
 
   const handleCopy = () => {
@@ -25,6 +26,46 @@ const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => 
         >
             Start Breathing Exercise
         </button>
+      </div>
+    );
+  }
+
+  if (message.type === 'visual_aid_offer') {
+    return (
+      <div className="my-4 p-4 bg-slate-700/50 border-l-4 border-cyan-500 rounded-r-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <p className="text-slate-300">{message.text}</p>
+        <button
+          onClick={() => onGenerateImage(message.imageGenerationPrompt!)}
+          className="px-5 py-2 bg-cyan-600 text-white font-semibold rounded-full hover:bg-cyan-700 transition-colors flex-shrink-0 self-start sm:self-center flex items-center gap-2"
+        >
+          <PhotographIcon className="w-5 h-5" />
+          Create Diagram
+        </button>
+      </div>
+    );
+  }
+
+  if (message.type === 'generated_image') {
+    return (
+      <div className={`flex items-start gap-3 my-4`}>
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-500 to-pink-500 text-white">
+          <BotIcon className="w-5 h-5" />
+        </div>
+        <div className="p-4 bg-slate-700 rounded-2xl rounded-tl-none max-w-sm md:max-w-md">
+            {message.isLoading ? (
+                <div className="flex items-center gap-3 text-slate-400">
+                    <LoadingSpinner />
+                    <span>Generating your diagram...</span>
+                </div>
+            ) : message.imageData ? (
+                <div>
+                    <h3 className="font-bold text-cyan-400 mb-2">{message.text}</h3>
+                    <img src={message.imageData} alt={message.imageGenerationPrompt} className="rounded-lg border border-slate-600" />
+                </div>
+            ) : (
+                <p className="text-red-400">Sorry, I couldn't create the diagram. Please try again.</p>
+            )}
+        </div>
       </div>
     );
   }
@@ -68,7 +109,7 @@ const MessageItem: React.FC<{ message: Message; onStartBreathingExercise: () => 
 };
 
 // FIX: Implement the ChatWindow component.
-export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathingExercise }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathingExercise, onGenerateImage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,7 +121,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onStartBreathi
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} onStartBreathingExercise={onStartBreathingExercise} />
+        <MessageItem key={msg.id} message={msg} onStartBreathingExercise={onStartBreathingExercise} onGenerateImage={onGenerateImage} />
       ))}
        {messages.length === 0 && (
          <div className="text-center text-slate-500 mt-10">
