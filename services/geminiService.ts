@@ -20,15 +20,17 @@ const getAi = (): GoogleGenAI => {
 
 export const analyzeMood = async (message: string): Promise<number | null> => {
   try {
-    const response = await getAi().models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Analyze the mood of this text on a scale from 1 (very negative) to 10 (very positive), providing only a JSON object with a "moodScore" key: "${message}"`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: moodAnalysisSchema,
-        temperature: 0.2,
-      },
-    });
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${API_KEY}`,
+  },
+  body: JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: userMessage }] }]
+  })
+});
+
     
     const jsonText = response.text.trim();
     if (!jsonText) return null;
