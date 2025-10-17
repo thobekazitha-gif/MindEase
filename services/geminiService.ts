@@ -4,19 +4,53 @@ import { moodAnalysisSchema } from "../data/prompts";
 
 // Lazy-initialize to prevent app crash on load if API key is missing.
 let ai: GoogleGenAI | null = null;
-const API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
 
+// 🔑 API Keys
+const GOOGLE_API_KEY = "AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
+const ELEVENLABS_API_KEY = "sk_f4740f565c5d93a0a27da7bed04d7fe28ff74f099be9ee09";
+
+// 🧠 Initialize Gemini
 export const getAi = (): GoogleGenAI => {
-    if (!ai) {
-        if (!API_KEY) {
-            // This error will be caught by the try/catch blocks in the calling functions.
-            throw new Error("API key is not set.");
-        }
-        ai = new GoogleGenAI({ apiKey: API_KEY });
+  if (!ai) {
+    if (!GOOGLE_API_KEY) {
+      throw new Error("Configuration Error: Google API key not set.");
     }
-    return ai;
+    ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+  }
+  return ai;
 };
 
+// 🗣️ ElevenLabs Speech Function
+async function speakText(text) {
+  try {
+    const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVENLABS_API_KEY,
+      },
+      body: JSON.stringify({
+        text: text,
+        voice: "Rachel", // or replace with any of your available voices
+        model_id: "eleven_monolingual_v1",
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to generate speech:", response.statusText);
+      return;
+    }
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audio.play();
+  } catch (error) {
+    console.error("Error in speakText:", error);
+  }
+}
+
+// 🎭 Mood Analysis
 export const analyzeMood = async (message: string): Promise<number | null> => {
   try {
     const response = await getAi().models.generateContent({
@@ -27,13 +61,12 @@ export const analyzeMood = async (message: string): Promise<number | null> => {
         responseSchema: moodAnalysisSchema,
       },
     });
-    
-    const jsonText = response.text.trim();
+
+    const jsonText = response.text?.trim();
     if (!jsonText) return null;
 
     const result = JSON.parse(jsonText);
-
-    if (result && typeof result.moodScore === 'number') {
+    if (result && typeof result.moodScore === "number") {
       return Math.round(Math.max(1, Math.min(10, result.moodScore)));
     }
     return null;
@@ -43,6 +76,7 @@ export const analyzeMood = async (message: string): Promise<number | null> => {
   }
 };
 
+// 🔊 Gemini TTS (optional alternative)
 export const getAudio = async (text: string, voiceSettings: VoiceSettings): Promise<string | null> => {
   try {
     const response = await getAi().models.generateContent({
@@ -69,29 +103,35 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
   }
 };
 
+// 🧩 Generate Summary + Speak It
 export const generateSummary = async (conversationHistory: Message[]): Promise<string | null> => {
-    try {
-      const formattedHistory = conversationHistory
-        .filter(msg => msg.type !== 'summary' && !msg.isLoading && msg.text)
-        .slice(-10) // Take last 10 messages for context
-        .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
-        .join('\n');
+  try {
+    const formattedHistory = conversationHistory
+      .filter((msg) => msg.type !== "summary" && !msg.isLoading && msg.text)
+      .slice(-10)
+      .map((msg) => `${msg.sender === "user" ? "User" : "Assistant"}: ${msg.text}`)
+      .join("\n");
 
-      if (!formattedHistory) return null;
+    if (!formattedHistory) return null;
 
-      const prompt = `Based on the following conversation, provide a concise summary (2-3 sentences) highlighting the key themes and one positive insight for the user. Present it as a helpful reflection, speaking directly to the user in the second person (e.g., "It seems you've been exploring..."). Conversation:\n\n${formattedHistory}`;
+    const prompt = `Based on the following conversation, provide a concise summary (2-3 sentences) highlighting the key themes and one positive insight for the user. Present it as a helpful reflection, speaking directly to the user in the second person (e.g., "It seems you've been exploring..."). Conversation:\n\n${formattedHistory}`;
 
-      const response = await getAi().models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-              temperature: 0.5,
-          }
-      });
+    const response = await getAi().models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.5,
+      },
+    });
 
-      return response.text.trim();
-    } catch (error) {
-      console.error("Error generating summary:", error);
-      return null;
+    const summaryText = response.text?.trim();
+    if (summaryText) {
+      speakText(summaryText); // 🎤 Voice output
+      return summaryText;
     }
-  };
+    return null;
+  } catch (error) {
+    console.error("Error generating summary:", error);
+    return null;
+  }
+};

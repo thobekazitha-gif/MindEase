@@ -128,13 +128,10 @@ const App: React.FC = () => {
         const stream = await chatRef.current.sendMessageStream({ message: text });
 
         let fullResponse = "";
-        let spokenResponse = "";
-        let sentenceEndRegex = /[.!?]/;
 
         for await (const chunk of stream) {
             const chunkText = chunk.text;
             fullResponse += chunkText;
-            spokenResponse += chunkText;
 
             // Stream to UI
             setMessages((prev) =>
@@ -142,21 +139,11 @@ const App: React.FC = () => {
                     msg.id === assistantMessageId ? { ...msg, text: fullResponse, isLoading: false } : msg
                 )
             );
-
-            // Check for sentence end to speak
-            if (sentenceEndRegex.test(spokenResponse)) {
-                const sentences = spokenResponse.split(sentenceEndRegex);
-                const completeSentence = sentences.slice(0, -1).join('. ') + '.';
-                if (completeSentence.trim()) {
-                    speak(completeSentence);
-                    spokenResponse = sentences.slice(-1)[0] || ""; // Keep the remainder
-                }
-            }
         }
         
-        // Speak any remaining part of the response
-        if (spokenResponse.trim()) {
-            speak(spokenResponse.trim());
+        // Speak the full response after it has been completely streamed
+        if (fullResponse.trim()) {
+            speak(fullResponse.trim());
         }
 
         // Finalize assistant message
