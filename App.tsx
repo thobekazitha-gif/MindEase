@@ -8,7 +8,7 @@ import { Affirmation } from './components/Affirmation';
 import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { Message, VoiceSettings, Visual } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
-import { getAudio, getAi } from './services/geminiService';
+import { getAudio, getAi, generateImage } from './services/geminiService';
 import { systemInstruction, studyBuddySchema } from './data/prompts';
 import { GoogleGenAI } from '@google/genai';
 
@@ -100,13 +100,6 @@ const App: React.FC = () => {
             speak(initialMessage.text);
         }
     }
-    if (!aiRef.current) {
-        try {
-            aiRef.current = getAi();
-        } catch (e) {
-            console.error("Error initializing Gemini:", e);
-        }
-    }
   }, []);
 
   // Effect to clear notifications after a delay
@@ -118,6 +111,43 @@ const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  const handleGenerateImage = async (prompt: string) => {
+    const imageMessageId = generateId();
+    const imageMessage: Message = {
+      id: imageMessageId,
+      text: '',
+      sender: 'assistant',
+      timestamp: Date.now(),
+      type: 'generated_image',
+      isLoading: true,
+    };
+    setMessages((prev) => [...prev, imageMessage]);
+
+    try {
+      const imageDataUrl = await generateImage(prompt);
+      if (!imageDataUrl) {
+        throw new Error("The model did not return an image.");
+      }
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === imageMessageId
+            ? { ...msg, isLoading: false, imageDataUrl }
+            : msg
+        )
+      );
+    } catch (error) {
+      console.error("Error generating image:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === imageMessageId
+            ? { ...msg, isLoading: false, error: `Failed to generate image: ${errorMessage}` }
+            : msg
+        )
+      );
+    }
+  };
 
   const handleSendMessage = async (text: string) => {
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
@@ -148,7 +178,7 @@ const App: React.FC = () => {
 
     try {
         if (!aiRef.current) {
-            throw new Error("AI not initialized");
+          aiRef.current = getAi();
         }
         
         const conversationHistory = messages
@@ -183,9 +213,25 @@ const App: React.FC = () => {
             throw new Error("The AI returned a response in an unexpected format.");
         }
         
+        let assistantText = parsedResponse.text || "I'm not sure how to respond to that.";
+        const offerMatch = assistantText.match(/\[GENERATE_VISUAL:(.+?)\]/);
+        let offerMessage: Message | null = null;
+        
+        if (offerMatch && offerMatch[1]) {
+            assistantText = assistantText.replace(offerMatch[0], '').trim();
+            offerMessage = {
+                id: generateId(),
+                sender: 'assistant',
+                timestamp: Date.now() + 1, // ensure it appears after the text
+                text: '',
+                type: 'visual_aid_offer',
+                imagePrompt: offerMatch[1].trim(),
+            };
+        }
+
         const finalAssistantMessage: Message = {
             id: assistantMessageId,
-            text: parsedResponse.text || "I'm not sure how to respond to that.",
+            text: assistantText,
             sender: 'assistant',
             timestamp: Date.now(),
             isLoading: false,
@@ -194,9 +240,13 @@ const App: React.FC = () => {
         };
         
         setMessages(prev => prev.map(msg => msg.id === assistantMessageId ? finalAssistantMessage : msg));
+
+        if (offerMessage) {
+            setMessages(prev => [...prev, offerMessage]);
+        }
         
-        if (parsedResponse.text) {
-          const sentences = parsedResponse.text.trim().match(/[^.!?]+[.!?]?/g) || [];
+        if (assistantText) {
+          const sentences = assistantText.trim().match(/[^.!?]+[.!?]?/g) || [];
           for (const sentence of sentences) {
               if(sentence.trim()) {
                   await speak(sentence.trim());
@@ -227,7 +277,7 @@ const App: React.FC = () => {
         onTechInfoClick={() => setIsTechInfoOpen(true)}
       />
         <main className="flex-1 flex flex-col min-h-0 relative">
-          <ChatWindow messages={messages} />
+          <ChatWindow messages={messages} onGenerateImage={handleGenerateImage} />
           <div className="px-4">
               <Affirmation />
           </div>

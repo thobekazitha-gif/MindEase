@@ -15,6 +15,10 @@ export interface Message {
   isStreaming?: boolean; // Indicates the AI is "thinking"
   visuals?: Visual[];
   references?: string[];
+  type?: 'visual_aid_offer' | 'generated_image';
+  imagePrompt?: string;
+  imageDataUrl?: string;
+  error?: string;
   // FIX: Add optional moodScore to support mood tracking feature.
   moodScore?: number;
 }

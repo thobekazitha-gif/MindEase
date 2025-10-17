@@ -1,9 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Message, Visual } from '../types';
 import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon, TableIcon, LinkIcon, LightbulbIcon } from './icons';
 
 interface ChatWindowProps {
   messages: Message[];
+  onGenerateImage?: (prompt: string) => void;
 }
 
 const VisualIcon: React.FC<{type: string}> = ({ type }) => {
@@ -62,12 +63,64 @@ const ReferencesDisplay: React.FC<{ references: string[] }> = ({ references }) =
 );
 
 
-const MessageItem: React.FC<{ message: Message; }> = ({ message }) => {
+const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: string) => void; }> = ({ message, onGenerateImage }) => {
   const isAssistant = message.sender === 'assistant';
+  const [isOfferClicked, setIsOfferClicked] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
   };
+
+  const handleCreateDiagramClick = () => {
+    if (onGenerateImage && message.imagePrompt && !isOfferClicked) {
+        onGenerateImage(message.imagePrompt);
+        setIsOfferClicked(true);
+    }
+  };
+
+  const renderContent = () => {
+    if (message.type === 'visual_aid_offer') {
+        return (
+            <button
+                onClick={handleCreateDiagramClick}
+                disabled={isOfferClicked}
+                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 disabled:bg-slate-500 disabled:cursor-not-allowed transition-colors"
+            >
+                <PhotographIcon className="w-5 h-5" />
+                <span>{isOfferClicked ? 'Generating...' : 'Create Diagram'}</span>
+            </button>
+        );
+    }
+
+    if (message.type === 'generated_image') {
+        return (
+            <div className="p-2 bg-slate-800 rounded-lg">
+                {message.isLoading && (
+                    <div className="w-64 h-64 flex items-center justify-center">
+                        <LoadingSpinner />
+                    </div>
+                )}
+                {message.error && (
+                    <div className="w-64 p-2 text-center text-red-400 text-sm">
+                        <p className="font-bold">Image Failed</p>
+                        <p>{message.error}</p>
+                    </div>
+                )}
+                {message.imageDataUrl && (
+                    <img src={message.imageDataUrl} alt="Generated visual aid" className="max-w-xs rounded-md" />
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="prose prose-sm prose-invert prose-p:my-2">
+            <p className="whitespace-pre-wrap">{message.text}</p>
+            {message.visuals && message.visuals.length > 0 && <VisualsDisplay visuals={message.visuals} />}
+            {message.references && message.references.length > 0 && <ReferencesDisplay references={message.references} />}
+        </div>
+    );
+  }
 
   return (
     <div className={`flex items-start gap-3 my-4 ${isAssistant ? '' : 'flex-row-reverse'}`}>
@@ -77,18 +130,14 @@ const MessageItem: React.FC<{ message: Message; }> = ({ message }) => {
         </div>
       )}
       <div className={`group relative px-4 py-3 rounded-2xl max-w-sm md:max-w-md lg:max-w-lg ${isAssistant ? 'bg-slate-700 text-slate-200 rounded-tl-none' : 'bg-violet-600 text-white rounded-tr-none'}`}>
-        {message.isLoading ? (
+        {message.isLoading && message.type !== 'generated_image' ? (
           <div className="flex items-center justify-center p-2">
             <LoadingSpinner />
           </div>
         ) : (
-          <div className="prose prose-sm prose-invert prose-p:my-2">
-            <p className="whitespace-pre-wrap">{message.text}</p>
-            {message.visuals && message.visuals.length > 0 && <VisualsDisplay visuals={message.visuals} />}
-            {message.references && message.references.length > 0 && <ReferencesDisplay references={message.references} />}
-          </div>
+          renderContent()
         )}
-        {isAssistant && !message.isLoading && (
+        {isAssistant && !message.isLoading && message.text && (
           <button
             onClick={handleCopy}
             className="absolute -top-2 -right-2 p-1.5 bg-slate-600 rounded-full text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -102,7 +151,7 @@ const MessageItem: React.FC<{ message: Message; }> = ({ message }) => {
   );
 };
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onGenerateImage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,7 +163,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} />
+        <MessageItem key={msg.id} message={msg} onGenerateImage={onGenerateImage} />
       ))}
     </div>
   );

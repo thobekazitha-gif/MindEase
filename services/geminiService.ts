@@ -40,3 +40,28 @@ export const getAudio = async (text: string, voiceSettings: VoiceSettings): Prom
     throw new Error(`TTS API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
+
+// 🖼️ Gemini Image Generation
+export const generateImage = async (prompt: string): Promise<string | null> => {
+  try {
+    const result = await getAi().models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [{ text: prompt }],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
+    });
+    for (const part of result.candidates[0].content.parts) {
+        if (part.inlineData) {
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:image/png;base64,${base64ImageBytes}`;
+        }
+    }
+    return null;
+  } catch (error) {
+      console.error("Error generating image:", error);
+      throw new Error(`Image generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
