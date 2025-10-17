@@ -7,7 +7,8 @@ let ai: GoogleGenAI | null = null;
 
 const getAi = (): GoogleGenAI => {
     if (!ai) {
-        const apiKey = process.env.API_KEY;
+        const apiKey ="AIzaSyAGoou-oftiIIEkX1-n_zryPfdZrBXPRr8";
+;
         if (!apiKey) {
             // This error will be caught by the try/catch blocks in the calling functions.
             throw new Error("API_KEY environment variable not set. Please configure it in your deployment settings.");
