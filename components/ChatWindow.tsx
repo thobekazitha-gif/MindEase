@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Message, Visual } from '../types';
-import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon, TableIcon, LinkIcon, LightbulbIcon } from './icons';
+import { Message, Visual, PracticeQuestion } from '../types';
+import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon, TableIcon, LinkIcon, LightbulbIcon, CollectionIcon } from './icons';
 
 interface ChatWindowProps {
   messages: Message[];
   onGenerateImage?: (prompt: string) => void;
+  onAddFlashcard: (question: PracticeQuestion) => void;
 }
 
 const VisualIcon: React.FC<{type: string}> = ({ type }) => {
@@ -62,8 +63,37 @@ const ReferencesDisplay: React.FC<{ references: string[] }> = ({ references }) =
     </div>
 );
 
+const PracticeQuestionsDisplay: React.FC<{ questions: PracticeQuestion[], onAddFlashcard: (question: PracticeQuestion) => void; }> = ({ questions, onAddFlashcard }) => {
+    const [addedIds, setAddedIds] = useState<number[]>([]);
 
-const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: string) => void; }> = ({ message, onGenerateImage }) => {
+    const handleAddClick = (question: PracticeQuestion, index: number) => {
+        onAddFlashcard(question);
+        setAddedIds(prev => [...prev, index]);
+    };
+
+    return (
+        <div className="mt-4 pt-3 border-t border-slate-600/50">
+            <h4 className="text-sm font-bold text-slate-300 mb-2">Practice Questions</h4>
+            <ul className="space-y-2">
+                {questions.map((q, index) => (
+                    <li key={index} className="flex items-start justify-between gap-3 p-2 bg-slate-800/50 rounded-lg">
+                        <p className="text-slate-300 text-sm leading-snug flex-1"><strong>Q:</strong> {q.question}</p>
+                        <button
+                            onClick={() => handleAddClick(q, index)}
+                            disabled={addedIds.includes(index)}
+                            className="flex-shrink-0 text-xs px-2 py-1 rounded-md bg-violet-600 hover:bg-violet-700 disabled:bg-slate-500 disabled:cursor-not-allowed transition-colors text-white font-semibold"
+                        >
+                            {addedIds.includes(index) ? 'Added!' : 'Add'}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+
+const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: string) => void; onAddFlashcard: (question: PracticeQuestion) => void; }> = ({ message, onGenerateImage, onAddFlashcard }) => {
   const isAssistant = message.sender === 'assistant';
   const [isOfferClicked, setIsOfferClicked] = useState(false);
 
@@ -118,6 +148,7 @@ const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: strin
             <p className="whitespace-pre-wrap">{message.text}</p>
             {message.visuals && message.visuals.length > 0 && <VisualsDisplay visuals={message.visuals} />}
             {message.references && message.references.length > 0 && <ReferencesDisplay references={message.references} />}
+            {message.practiceQuestions && message.practiceQuestions.length > 0 && <PracticeQuestionsDisplay questions={message.practiceQuestions} onAddFlashcard={onAddFlashcard} />}
         </div>
     );
   }
@@ -151,7 +182,7 @@ const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: strin
   );
 };
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onGenerateImage }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onGenerateImage, onAddFlashcard }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -163,7 +194,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onGenerateImag
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} onGenerateImage={onGenerateImage} />
+        <MessageItem key={msg.id} message={msg} onGenerateImage={onGenerateImage} onAddFlashcard={onAddFlashcard} />
       ))}
     </div>
   );

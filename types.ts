@@ -6,6 +6,15 @@ export interface Visual {
   source: string;
 }
 
+export interface PracticeQuestion {
+  question: string;
+  answer: string;
+}
+
+export interface Flashcard extends PracticeQuestion {
+  id: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -15,6 +24,7 @@ export interface Message {
   isStreaming?: boolean; // Indicates the AI is "thinking"
   visuals?: Visual[];
   references?: string[];
+  practiceQuestions?: PracticeQuestion[];
   type?: 'visual_aid_offer' | 'generated_image';
   imagePrompt?: string;
   imageDataUrl?: string;

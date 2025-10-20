@@ -7,7 +7,9 @@ import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { MoodDashboard } from './components/MoodDashboard';
 import { Affirmation } from './components/Affirmation';
 import { BreathingExercise } from './components/BreathingExercise';
-import { Message, VoiceSettings } from './types';
+import { FlashcardPanel } from './components/FlashcardPanel';
+import { FlashcardReview } from './components/FlashcardReview';
+import { Message, VoiceSettings, Flashcard, PracticeQuestion } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
 import { getAudio, analyzeMood, getChatStream, generateImage } from './services/geminiService';
 import { journalPrompts } from './data/journalPrompts';
@@ -17,12 +19,16 @@ const App: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isSending, setIsSending] = useState(false);
     const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ voice: 'Kore', rate: 1.0 });
+    const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
 
     // UI State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
     const [isMoodDashboardOpen, setIsMoodDashboardOpen] = useState(false);
     const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
+    const [isFlashcardPanelOpen, setIsFlashcardPanelOpen] = useState(false);
+    const [isReviewing, setIsReviewing] = useState(false);
+
 
     // Audio playback queue
     const audioQueue = useRef<AudioBuffer[]>([]);
@@ -32,6 +38,27 @@ const App: React.FC = () => {
     // Chat instance
     const chatRef = useRef<Chat | null>(null);
     
+    // Load flashcards from localStorage on initial render
+    useEffect(() => {
+        try {
+            const savedFlashcards = localStorage.getItem('flashcards');
+            if (savedFlashcards) {
+                setFlashcards(JSON.parse(savedFlashcards));
+            }
+        } catch (error) {
+            console.error("Failed to load flashcards from localStorage:", error);
+        }
+    }, []);
+
+    // Save flashcards to localStorage whenever they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('flashcards', JSON.stringify(flashcards));
+        } catch (error) {
+            console.error("Failed to save flashcards to localStorage:", error);
+        }
+    }, [flashcards]);
+
     const playAudio = async (text: string) => {
         if (!text || !audioContext.current) return;
         try {
@@ -252,6 +279,7 @@ const App: React.FC = () => {
                     text: finalMessageText,
                     visuals: parsedResponse.visuals,
                     references: parsedResponse.references,
+                    practiceQuestions: parsedResponse.practiceQuestions,
                     isLoading: false,
                     isStreaming: false,
                 } : msg
@@ -278,6 +306,22 @@ const App: React.FC = () => {
         }
     };
 
+    const handleAddFlashcard = (card: PracticeQuestion) => {
+        const newCard: Flashcard = { ...card, id: generateId() };
+        setFlashcards(prev => [...prev, newCard]);
+    };
+    
+    const handleDeleteFlashcard = (id: string) => {
+        setFlashcards(prev => prev.filter(card => card.id !== id));
+    };
+
+    const handleStartReview = () => {
+        if (flashcards.length > 0) {
+            setIsFlashcardPanelOpen(false);
+            setIsReviewing(true);
+        }
+    };
+
 
     return (
         <div className="flex flex-col h-screen bg-slate-900 text-white font-sans">
@@ -287,8 +331,9 @@ const App: React.FC = () => {
             />
             <div className="flex-1 flex flex-col min-h-0 relative">
                 <Affirmation />
-                <ChatWindow messages={messages} onGenerateImage={handleGenerateImage} />
+                <ChatWindow messages={messages} onGenerateImage={handleGenerateImage} onAddFlashcard={handleAddFlashcard} />
                 <div className="flex items-center justify-center gap-4 px-4 pb-2">
+                    <button onClick={() => setIsFlashcardPanelOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Flashcards</button>
                     <button onClick={() => setIsMoodDashboardOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Mood Analytics</button>
                     <button onClick={() => setIsBreathingExerciseOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Breathing Exercise</button>
                 </div>
@@ -310,7 +355,16 @@ const App: React.FC = () => {
                 onClose={() => setIsMoodDashboardOpen(false)}
                 messages={messages}
             />
+            <FlashcardPanel
+                isOpen={isFlashcardPanelOpen}
+                onClose={() => setIsFlashcardPanelOpen(false)}
+                flashcards={flashcards}
+                onAddFlashcard={handleAddFlashcard}
+                onDeleteFlashcard={handleDeleteFlashcard}
+                onStartReview={handleStartReview}
+            />
             {isBreathingExerciseOpen && <BreathingExercise onClose={() => setIsBreathingExerciseOpen(false)} />}
+            {isReviewing && <FlashcardReview cards={flashcards} onClose={() => setIsReviewing(false)} />}
         </div>
     );
 }
