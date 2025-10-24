@@ -1,4 +1,7 @@
 // FIX: Define shared TypeScript types for the application.
+import { Blob } from "@google/genai";
+
+export type ChatMode = 'standard' | 'fast' | 'deep' | 'search';
 
 export interface Visual {
   description: string;
@@ -15,6 +18,11 @@ export interface Flashcard extends PracticeQuestion {
   id: string;
 }
 
+export interface GroundingSource {
+    uri: string;
+    title: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -25,7 +33,8 @@ export interface Message {
   visuals?: Visual[];
   references?: string[];
   practiceQuestions?: PracticeQuestion[];
-  type?: 'visual_aid_offer' | 'generated_image';
+  groundingSources?: GroundingSource[];
+  type?: 'visual_aid_offer' | 'generated_image' | 'summary';
   imagePrompt?: string;
   imageDataUrl?: string;
   error?: string;
@@ -36,7 +45,10 @@ export interface Message {
 export interface VoiceSettings {
   voice: string;
   rate: number;
+  chatMode: ChatMode;
 }
+
+export { Blob };
 
 // FIX: Add webkitAudioContext to Window interface to fix TypeScript error in App.tsx.
 declare global {

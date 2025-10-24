@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality, Chat, GenerateContentResponse } from "@google/genai";
-import { VoiceSettings } from "../types";
+import { VoiceSettings, ChatMode } from "../types";
 import { systemInstruction, studyBuddySchema } from '../data/prompts';
 
 // Lazy-initialize to prevent app crash on load if API key is missing.
@@ -48,14 +48,49 @@ export const analyzeMood = async (text: string): Promise<number | null> => {
 };
 
 // 💬 Main Chat Stream
-export const getChatStream = (history: { role: string; parts: { text: string }[] }[]): Chat => {
+export const getChatStream = (history: { role: string; parts: { text: string }[] }[], mode: ChatMode): Chat => {
+    let modelName = 'gemini-2.5-flash';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let config: any = {};
+
+    switch (mode) {
+        case 'fast':
+            modelName = 'gemini-2.5-flash-lite';
+            config = {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: studyBuddySchema,
+            };
+            break;
+        case 'deep':
+            modelName = 'gemini-2.5-pro';
+            config = {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: studyBuddySchema,
+                thinkingConfig: { thinkingBudget: 32768 },
+            };
+            break;
+        case 'search':
+            modelName = 'gemini-2.5-flash';
+            config = {
+                tools: [{googleSearch: {}}]
+            };
+            break;
+        case 'standard':
+        default:
+            modelName = 'gemini-2.5-flash';
+            config = {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: studyBuddySchema,
+            };
+            break;
+    }
+
     const chat: Chat = getAi().chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: studyBuddySchema,
-        },
+        model: modelName,
+        config,
         history,
     });
     return chat;
@@ -102,8 +137,26 @@ export const generateImage = async (prompt: string): Promise<string | null> => {
       }
     }
     return null;
-  } catch (error) {
+  } catch (error)
+ {
     console.error("Error generating image:", error);
     throw new Error(`Image generation API call failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
+
+// 📝 Gemini Summary Generation
+export const getSummary = async (history: { role: string; parts: { text: string }[] }[]): Promise<string> => {
+    try {
+        const response = await getAi().models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [
+                ...history,
+                { role: 'user', parts: [{ text: 'Please summarize the key points and important information from our conversation so far. Format it nicely with headings and bullet points.' }] }
+            ]
+        });
+        return response.text;
+    } catch(error) {
+        console.error("Error generating summary:", error);
+        throw new Error(`Summary API call failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Message, Visual, PracticeQuestion } from '../types';
+import { Message, Visual, PracticeQuestion, GroundingSource } from '../types';
 import { BotIcon, LoadingSpinner, ClipboardIcon, PhotographIcon, TableIcon, LinkIcon, LightbulbIcon, CollectionIcon } from './icons';
 
 interface ChatWindowProps {
@@ -59,6 +59,22 @@ const ReferencesDisplay: React.FC<{ references: string[] }> = ({ references }) =
                     </li>
                 );
             })}
+        </ul>
+    </div>
+);
+
+const GroundingSourcesDisplay: React.FC<{ sources: GroundingSource[] }> = ({ sources }) => (
+    <div className="mt-4 pt-3 border-t border-slate-600/50">
+        <h4 className="text-sm font-bold text-slate-300 mb-2">Sources</h4>
+        <ul className="space-y-1">
+            {sources.map((source, index) => (
+                 <li key={index}>
+                    <a href={source.uri} target="_blank" rel="noopener noreferrer" className="text-sm text-violet-400 hover:underline flex items-start gap-2 group">
+                       <LinkIcon className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition-colors flex-shrink-0 mt-1" />
+                       <span className="truncate">{source.title || new URL(source.uri).hostname}</span>
+                    </a>
+                </li>
+            ))}
         </ul>
     </div>
 );
@@ -148,6 +164,7 @@ const MessageItem: React.FC<{ message: Message; onGenerateImage?: (prompt: strin
             <p className="whitespace-pre-wrap">{message.text}</p>
             {message.visuals && message.visuals.length > 0 && <VisualsDisplay visuals={message.visuals} />}
             {message.references && message.references.length > 0 && <ReferencesDisplay references={message.references} />}
+            {message.groundingSources && message.groundingSources.length > 0 && <GroundingSourcesDisplay sources={message.groundingSources} />}
             {message.practiceQuestions && message.practiceQuestions.length > 0 && <PracticeQuestionsDisplay questions={message.practiceQuestions} onAddFlashcard={onAddFlashcard} />}
         </div>
     );

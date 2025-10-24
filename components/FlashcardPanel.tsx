@@ -71,9 +71,9 @@ export const FlashcardPanel: React.FC<FlashcardPanelProps> = ({ isOpen, onClose,
         <div className="p-4 border-b border-slate-700 flex-shrink-0">
             <form onSubmit={handleAddCard} className="space-y-2">
                 <h3 className="text-sm font-medium text-slate-300">Create New Card</h3>
-                <div className="flex items-center gap-2">
-                    <input type="text" value={front} onChange={e => setFront(e.target.value)} placeholder="Question / Term" className="flex-1 p-2 bg-slate-700 text-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none transition" />
-                    <input type="text" value={back} onChange={e => setBack(e.target.value)} placeholder="Answer / Definition" className="flex-1 p-2 bg-slate-700 text-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none transition" />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input type="text" value={front} onChange={e => setFront(e.target.value)} placeholder="Question / Term" className="w-full sm:flex-1 p-2 bg-slate-700 text-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none transition" />
+                    <input type="text" value={back} onChange={e => setBack(e.target.value)} placeholder="Answer / Definition" className="w-full sm:flex-1 p-2 bg-slate-700 text-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none transition" />
                     <button type="submit" className="px-3 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-500 transition-colors">Add</button>
                 </div>
             </form>

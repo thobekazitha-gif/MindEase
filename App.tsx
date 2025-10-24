@@ -6,28 +6,28 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { TechnicalInfoPanel } from './components/TechnicalInfoPanel';
 import { MoodDashboard } from './components/MoodDashboard';
 import { Affirmation } from './components/Affirmation';
-import { BreathingExercise } from './components/BreathingExercise';
 import { FlashcardPanel } from './components/FlashcardPanel';
 import { FlashcardReview } from './components/FlashcardReview';
-import { Message, VoiceSettings, Flashcard, PracticeQuestion } from './types';
+import { LiveConversation } from './components/LiveConversation';
+import { Message, VoiceSettings, Flashcard, PracticeQuestion, GroundingSource } from './types';
 import { generateId, decode, decodeAudioData } from './utils/helpers';
-import { getAudio, analyzeMood, getChatStream, generateImage } from './services/geminiService';
+import { getAudio, analyzeMood, getChatStream, generateImage, getSummary } from './services/geminiService';
 import { journalPrompts } from './data/journalPrompts';
-import { Chat } from '@google/genai';
+import { Chat, GenerateContentResponse } from '@google/genai';
 
 const App: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isSending, setIsSending] = useState(false);
-    const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ voice: 'Kore', rate: 1.0 });
+    const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ voice: 'Kore', rate: 1.0, chatMode: 'standard' });
     const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
 
     // UI State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isTechInfoOpen, setIsTechInfoOpen] = useState(false);
     const [isMoodDashboardOpen, setIsMoodDashboardOpen] = useState(false);
-    const [isBreathingExerciseOpen, setIsBreathingExerciseOpen] = useState(false);
     const [isFlashcardPanelOpen, setIsFlashcardPanelOpen] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
+    const [isLivePanelOpen, setIsLivePanelOpen] = useState(false);
 
 
     // Audio playback queue
@@ -38,6 +38,11 @@ const App: React.FC = () => {
     // Chat instance
     const chatRef = useRef<Chat | null>(null);
     
+    // Reset chat instance if settings change to apply new model/config
+    useEffect(() => {
+        chatRef.current = null;
+    }, [voiceSettings]);
+
     // Load flashcards from localStorage on initial render
     useEffect(() => {
         try {
@@ -176,11 +181,6 @@ const App: React.FC = () => {
 
         if (!userInput.trim()) return;
 
-        if (userInput.toLowerCase().includes("breathing exercise")) {
-            setIsBreathingExerciseOpen(true);
-            return;
-        }
-
         setIsSending(true);
         const userMessageId = generateId();
         
@@ -218,83 +218,116 @@ const App: React.FC = () => {
                         role: msg.sender === 'user' ? 'user' : 'model',
                         parts: [{ text: msg.text }]
                     }));
-                chatRef.current = getChatStream(initialHistory);
+                chatRef.current = getChatStream(initialHistory, voiceSettings.chatMode);
             }
 
             const stream = await chatRef.current.sendMessageStream({ message: userInput });
 
             let fullResponseText = '';
+            let lastChunk: GenerateContentResponse | null = null;
             for await (const chunk of stream) {
                 const chunkText = chunk.text;
                 if (chunkText) {
                     fullResponseText += chunkText;
                     setMessages(prev => prev.map(msg => 
-                        msg.id === assistantMessageId ? { ...msg, isLoading: true, isStreaming: true } : msg
+                        msg.id === assistantMessageId ? { ...msg, text: fullResponseText, isLoading: true, isStreaming: true } : msg
                     ));
                 }
+                lastChunk = chunk;
             }
 
-            let parsedResponse;
-            try {
-                // Ensure we have a complete JSON object before parsing
-                const lastBrace = fullResponseText.lastIndexOf('}');
-                const firstBrace = fullResponseText.indexOf('{');
-                if (lastBrace > firstBrace) {
-                    fullResponseText = fullResponseText.substring(firstBrace, lastBrace + 1);
-                }
-                parsedResponse = JSON.parse(fullResponseText);
-            } catch (e) {
-                console.error("Failed to parse JSON from stream:", e, "Response was:", fullResponseText);
-                setMessages(prev => prev.map(msg => 
-                    msg.id === assistantMessageId ? { ...msg, text: "Sorry, I received an invalid response.", isLoading: false, isStreaming: false, error: "Response format was invalid." } : msg
-                ));
-                setIsSending(false);
-                return;
-            }
-            
-            // This is the text the AI voice will read. It comes ONLY from the 'text' field.
-            const textToSpeak = parsedResponse.text;
-            if (textToSpeak && typeof textToSpeak === 'string') {
-                const sentences = textToSpeak.match(/[^.!?]+[.!?]+\s*|.+/g) || [];
-                for (const sentence of sentences) {
-                    if (sentence.trim()) {
-                        playAudio(sentence.trim());
+            // Handle different response types based on chat mode
+            if (voiceSettings.chatMode === 'search') {
+                 if (fullResponseText) {
+                    const sentences = fullResponseText.match(/[^.!?]+[.!?]+\s*|.+/g) || [];
+                    for (const sentence of sentences) {
+                        if (sentence.trim()) {
+                            playAudio(sentence.trim());
+                        }
                     }
                 }
-            }
+                
+                const groundingChunks = lastChunk?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                const groundingSources: GroundingSource[] = groundingChunks
+                    .map((chunk: any) => chunk.web)
+                    .filter(Boolean)
+                    .map((source: any) => ({ uri: source.uri, title: source.title }))
+                    // Remove duplicates
+                    .filter((value, index, self) => self.findIndex(s => s.uri === value.uri) === index);
 
-            const imageGenRegex = /\[GENERATE_VISUAL:\s*(.*?)\]/;
-            const match = parsedResponse.text.match(imageGenRegex);
-            let finalMessageText = parsedResponse.text;
-            let imagePrompt: string | undefined = undefined;
 
-            if (match && match[1]) {
-                finalMessageText = finalMessageText.replace(imageGenRegex, '').trim();
-                imagePrompt = match[1];
-            }
+                setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessageId ? { 
+                        ...msg, 
+                        text: fullResponseText,
+                        groundingSources,
+                        isLoading: false,
+                        isStreaming: false,
+                    } : msg
+                ));
 
-            setMessages(prev => prev.map(msg => 
-                msg.id === assistantMessageId ? { 
-                    ...msg, 
-                    text: finalMessageText,
-                    visuals: parsedResponse.visuals,
-                    references: parsedResponse.references,
-                    practiceQuestions: parsedResponse.practiceQuestions,
-                    isLoading: false,
-                    isStreaming: false,
-                } : msg
-            ));
+            } else {
+                // Default JSON-based handling
+                let parsedResponse;
+                try {
+                    const lastBrace = fullResponseText.lastIndexOf('}');
+                    const firstBrace = fullResponseText.indexOf('{');
+                    if (lastBrace > firstBrace) {
+                        fullResponseText = fullResponseText.substring(firstBrace, lastBrace + 1);
+                    }
+                    parsedResponse = JSON.parse(fullResponseText);
+                } catch (e) {
+                    console.error("Failed to parse JSON from stream:", e, "Response was:", fullResponseText);
+                    setMessages(prev => prev.map(msg => 
+                        msg.id === assistantMessageId ? { ...msg, text: "Sorry, I received an invalid response.", isLoading: false, isStreaming: false, error: "Response format was invalid." } : msg
+                    ));
+                    setIsSending(false);
+                    return;
+                }
+                
+                const textToSpeak = parsedResponse.text;
+                if (textToSpeak && typeof textToSpeak === 'string') {
+                    const sentences = textToSpeak.match(/[^.!?]+[.!?]+\s*|.+/g) || [];
+                    for (const sentence of sentences) {
+                        if (sentence.trim()) {
+                            playAudio(sentence.trim());
+                        }
+                    }
+                }
 
-            if (imagePrompt) {
-                const offerMessage: Message = {
-                    id: generateId(),
-                    text: '',
-                    sender: 'assistant',
-                    timestamp: Date.now(),
-                    type: 'visual_aid_offer',
-                    imagePrompt: imagePrompt,
-                };
-                setMessages(prev => [...prev, offerMessage]);
+                const imageGenRegex = /\[GENERATE_VISUAL:\s*(.*?)\]/;
+                const match = parsedResponse.text.match(imageGenRegex);
+                let finalMessageText = parsedResponse.text;
+                let imagePrompt: string | undefined = undefined;
+
+                if (match && match[1]) {
+                    finalMessageText = finalMessageText.replace(imageGenRegex, '').trim();
+                    imagePrompt = match[1];
+                }
+
+                setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessageId ? { 
+                        ...msg, 
+                        text: finalMessageText,
+                        visuals: parsedResponse.visuals,
+                        references: parsedResponse.references,
+                        practiceQuestions: parsedResponse.practiceQuestions,
+                        isLoading: false,
+                        isStreaming: false,
+                    } : msg
+                ));
+
+                if (imagePrompt) {
+                    const offerMessage: Message = {
+                        id: generateId(),
+                        text: '',
+                        sender: 'assistant',
+                        timestamp: Date.now(),
+                        type: 'visual_aid_offer',
+                        imagePrompt: imagePrompt,
+                    };
+                    setMessages(prev => [...prev, offerMessage]);
+                }
             }
 
         } catch (error) {
@@ -321,6 +354,47 @@ const App: React.FC = () => {
             setIsReviewing(true);
         }
     };
+    
+    const handleSummary = async () => {
+        setIsSending(true);
+        const summaryMessageId = generateId();
+        const summaryMessage: Message = {
+            id: summaryMessageId,
+            sender: 'assistant',
+            timestamp: Date.now(),
+            isLoading: true,
+            text: 'Summarizing your session...',
+            type: 'summary',
+        };
+        setMessages(prev => [...prev, summaryMessage]);
+
+        try {
+            const history = messages
+                .filter(m => (m.sender === 'user' || m.sender === 'assistant') && m.text)
+                .map(msg => ({
+                    role: msg.sender === 'user' ? 'user' : 'model',
+                    parts: [{ text: msg.text }]
+                }));
+            
+            const summaryText = await getSummary(history);
+            
+            setMessages(prev => prev.map(msg => msg.id === summaryMessageId ? { ...msg, isLoading: false, text: summaryText } : msg));
+
+            const sentences = summaryText.match(/[^.!?]+[.!?]+\s*|.+/g) || [];
+            for (const sentence of sentences) {
+                if (sentence.trim()) {
+                    playAudio(sentence.trim());
+                }
+            }
+
+        } catch(error) {
+            console.error("Failed to generate summary:", error);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            setMessages(prev => prev.map(msg => msg.id === summaryMessageId ? { ...msg, isLoading: false, error: errorMessage, text: '' } : msg));
+        } finally {
+            setIsSending(false);
+        }
+    };
 
 
     return (
@@ -328,15 +402,14 @@ const App: React.FC = () => {
             <Header 
                 onSettingsClick={() => setIsSettingsOpen(true)}
                 onTechInfoClick={() => setIsTechInfoOpen(true)}
+                onFlashcardsClick={() => setIsFlashcardPanelOpen(true)}
+                onMoodClick={() => setIsMoodDashboardOpen(true)}
+                onLiveClick={() => setIsLivePanelOpen(true)}
+                onSummaryClick={handleSummary}
             />
             <div className="flex-1 flex flex-col min-h-0 relative">
                 <Affirmation />
                 <ChatWindow messages={messages} onGenerateImage={handleGenerateImage} onAddFlashcard={handleAddFlashcard} />
-                <div className="flex items-center justify-center gap-4 px-4 pb-2">
-                    <button onClick={() => setIsFlashcardPanelOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Flashcards</button>
-                    <button onClick={() => setIsMoodDashboardOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Mood Analytics</button>
-                    <button onClick={() => setIsBreathingExerciseOpen(true)} className="text-xs text-slate-400 hover:text-violet-400 transition-colors">Breathing Exercise</button>
-                </div>
                 <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
             </div>
 
@@ -363,7 +436,10 @@ const App: React.FC = () => {
                 onDeleteFlashcard={handleDeleteFlashcard}
                 onStartReview={handleStartReview}
             />
-            {isBreathingExerciseOpen && <BreathingExercise onClose={() => setIsBreathingExerciseOpen(false)} />}
+             <LiveConversation 
+                isOpen={isLivePanelOpen}
+                onClose={() => setIsLivePanelOpen(false)}
+            />
             {isReviewing && <FlashcardReview cards={flashcards} onClose={() => setIsReviewing(false)} />}
         </div>
     );

@@ -135,3 +135,9 @@ export const CollectionIcon = (props: React.SVGProps<SVGSVGElement>) => (
         <path d="M3 10h18" />
     </IconBase>
 );
+
+export const WaveformIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <IconBase {...props}>
+        <path d="M3 12h2l2-9l2 18l2-9l2 12l2-3l2 3h2" />
+    </IconBase>
+);
